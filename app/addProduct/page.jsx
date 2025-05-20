@@ -1,10 +1,23 @@
 'use client'
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Search, Barcode, PlusCircle, CheckCircle } from 'lucide-react';
-import { useInventory } from '@/context/inventoryContext'; // Assuming you have this context
-import searchInventoryItems from '@/lib/searchInventoryItems'; // Assuming this utility
-import toast from 'react-hot-toast'; // For notifications
-import { useRouter } from 'next/navigation'; // For navigation
+import { useInventory } from '@/context/inventoryContext';
+import searchInventoryItems from '@/lib/searchInventoryItems';
+import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
+
+// Debounce Utility Function
+const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+        timeoutId = setTimeout(() => {
+            func.apply(null, args);
+        }, delay);
+    };
+};
 
 const AddProductPage = () => {
     const [barcode, setBarcode] = useState('');
@@ -13,69 +26,72 @@ const AddProductPage = () => {
     const [searchResults, setSearchResults] = useState([]);
     const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
     const [error, setError] = useState('');
-    const [selectedItem, setSelectedItem] = useState(null); // To hold item selected from search or barcode lookup
-    const [isBarcodeSaved, setIsBarcodeSaved] = useState(false); // Indicates if barcode corresponds to a saved item
-    const { inventoryItems, setInventoryItems } = useInventory(); // Get inventory state and setter
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [isProductFound, setIsProductFound] = useState(false);
+    const { inventoryItems, setInventoryItems } = useInventory();
     const router = useRouter();
 
     const [originalPrice, setOriginalPrice] = useState('');
     const [discountedPrice, setDiscountedPrice] = useState('');
     const [quantity, setQuantity] = useState('');
-
+    const [quantityChange, setQuantityChange] = useState('');
     const barcodeInputRef = useRef(null);
 
     useEffect(() => {
-        // Focus on the barcode input when the component mounts
         if (barcodeInputRef.current) {
             barcodeInputRef.current.focus();
         }
     }, []);
 
-    // Function to look up product by barcode
+    // --- Core Search and Lookup Functions ---
     const lookupProductByBarcode = useCallback(async (scannedBarcode) => {
         setError('');
-        setSelectedItem(null); // Clear any previously selected item
-        setIsBarcodeSaved(false); // Reset saved status
-
+        setSelectedItem(null);
+        setIsProductFound(false);
         if (!scannedBarcode) {
+            toast.dismiss('barcode-lookup');
+            return;
+        }
+
+        const barcodeNumber = parseInt(scannedBarcode, 10);
+        if (isNaN(barcodeNumber)) {
+            setError('Invalid barcode: Barcode must be a number.');
+            toast.error('Invalid barcode format.', { id: 'barcode-lookup' });
             return;
         }
 
         toast.loading(`Searching for barcode: ${scannedBarcode}...`, { id: 'barcode-lookup' });
-
         try {
-            const response = await fetch('/api/scanBarcode', { // Assuming you have a /api/scanBarcode endpoint
+            const response = await fetch('/api/scanBarcode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ barcode: scannedBarcode }),
+                body: JSON.stringify({ barcode: barcodeNumber }),
             });
-
             const data = await response.json();
 
             if (response.ok) {
                 const product = data.product;
-                // If product found, pre-fill all fields
                 setSelectedItem(product);
                 setItemName(product.itemName);
-                setOriginalPrice(product.originalPrice || '');
-                setDiscountedPrice(product.discountedPrice || '');
-                setQuantity(product.quantity || ''); // Fill quantity if available
-                setBarcode(product.barcode.toString());
-                setIsBarcodeSaved(true); // Mark as found/saved
-                setSearchResults([]); // Clear search results if a product is found via barcode
+                setOriginalPrice(product.originalPrice?.toString() || '');
+                setDiscountedPrice(product.discountedPrice?.toString() || '');
+                setQuantity(product.quantity?.toString() || '');
+                setIsProductFound(true);
+                setSearchResults([]);
                 toast.success(`Product found: ${product.itemName}`, { id: 'barcode-lookup' });
             } else if (response.status === 404) {
-                // If barcode doesn't exist, clear fields and let user add new product
-                setItemName('');
-                setOriginalPrice('');
-                setDiscountedPrice('');
-                setQuantity('');
+                if (!selectedItem) {
+                    setItemName('');
+                    setOriginalPrice('');
+                    setDiscountedPrice('');
+                    setQuantity('');
+                }
                 setSelectedItem(null);
-                setIsBarcodeSaved(false); // Not saved
-                toast.error(`No product found for barcode: ${scannedBarcode}. Fill details to add it.`, { id: 'barcode-lookup' });
+                setIsProductFound(false);
+                toast.error(`No product found for barcode: ${scannedBarcode}. Please fill details to add it.`, { id: 'barcode-lookup' });
             } else {
-                setError(data.message || `Error looking up barcode: ${response.status}`);
-                toast.error(`Error: ${data.message || 'Unknown error'}`, { id: 'barcode-lookup' });
+                setError(data.error || `Error looking up barcode: ${response.status}`);
+                toast.error(`Error: ${data.error || 'Unknown error'}`, { id: 'barcode-lookup' });
             }
         } catch (err) {
             setError(`Network error: ${err.message}`);
@@ -83,50 +99,118 @@ const AddProductPage = () => {
         } finally {
             toast.dismiss('barcode-lookup');
         }
-    }, []);
+    }, [selectedItem]);
 
-    const handleBarcodeInputKeyDown = useCallback((e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault(); // Prevent form submission
-            lookupProductByBarcode(barcode);
-        }
-    }, [barcode, lookupProductByBarcode]);
+    const debouncedLookupProduct = useCallback(debounce(lookupProductByBarcode, 300), [lookupProductByBarcode]);
 
-    // Function to handle item search by name
-    const handleSearch = () => {
+    const handleSearchByName = () => {
         if (!searchQuery.trim()) {
-            setError('Please enter a search query.');
+            setError('Please enter a search query for the item name.');
             setSearchResults([]);
             return;
         }
-
-        // Assuming searchInventoryItems filters from your local inventoryItems context
+        setError('');
         const results = searchInventoryItems(inventoryItems, searchQuery);
-        setSearchResults(results);
-        if (results.length === 0) {
-            setError('No matching items found.');
+
+        if (results.length > 0) {
+            setSearchResults(results);
+            if (results.length === 1) {
+                handleSelectItem(results[0]);
+            }
         } else {
-            setError('');
+            setSearchResults([]);
+            setError('No matching items found for this name.');
+            setSelectedItem(null);
+            setIsProductFound(false);
         }
     };
 
-    // Function to select an item from search results
     const handleSelectItem = (item) => {
         setSelectedItem(item);
         setItemName(item.itemName);
-        setBarcode(item.barcode ? item.barcode.toString() : '');
-        setOriginalPrice(item.originalPrice || '');
-        setDiscountedPrice(item.discountedPrice || '');
-        setQuantity(item.quantity || ''); // Fill quantity if available
-        setSearchResults([]); // Clear results after selection
+        setBarcode(item.barcode?.toString() || '');
+        setOriginalPrice(item.originalPrice?.toString() || '');
+        setDiscountedPrice(item.discountedPrice?.toString() || '');
+        setQuantity(item.quantity?.toString() || '');
+        setSearchResults([]);
         setError('');
-        setIsBarcodeSaved(true); // Mark as found/saved
+        setIsProductFound(true);
+        setQuantityChange('');
     };
 
-    // Function to generate barcode and add item
-    const handleGenerateBarcodeAndAddItem = async () => {
+    // --- Form Management and Actions ---
+    const handleClearForm = () => {
+        setBarcode('');
+        setItemName('');
+        setOriginalPrice('');
+        setDiscountedPrice('');
+        setQuantity('');
+        setQuantityChange('');
+        setSearchQuery('');
+        setSearchResults([]);
+        setSelectedItem(null);
+        setIsProductFound(false);
+        setError('');
+        barcodeInputRef.current?.focus();
+    };
+
+    const handleUpdateProduct = async () => {
+        if (!itemName.trim() || originalPrice === '' || discountedPrice === '' || quantity === '' || !barcode) {
+            setError('Please fill all product fields and ensure a barcode is present.');
+            return;
+        }
+        if (isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseInt(quantity, 10))) {
+            setError('Prices and quantity must be valid numbers.');
+            return;
+        }
+
+        setError('');
+        toast.loading(`Updating ${itemName}...`, { id: 'update-product' });
+
+        try {
+            let finalQuantity = parseInt(quantity, 10);
+            const qtyChange = parseInt(quantityChange, 10);
+
+            if (!isNaN(qtyChange)) {
+                finalQuantity = parseInt(quantity, 10) + qtyChange;
+                if (finalQuantity < 0) {
+                    setError('Quantity cannot be negative.');
+                    toast.error('Quantity cannot be negative.', { id: 'update-product' });
+                    return;
+                }
+            }
+
+            const res = await fetch(`/api/addProduct`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    itemName,
+                    quantity: finalQuantity,
+                    originalPrice: parseFloat(originalPrice),
+                    discountedPrice: parseFloat(discountedPrice),
+                    barcode: parseInt(barcode, 10),
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to update product.');
+            }
+
+            toast.success('Product updated successfully!', { id: 'update-product' });
+            handleClearForm();
+
+        } catch (err) {
+            console.error('Error updating product:', err);
+            setError(err.message);
+            toast.error(err.message, { id: 'update-product' });
+        }
+    };
+
+    const handleGenerateBarcodeAndSave = async () => {
         if (!itemName.trim() || originalPrice === '' || discountedPrice === '' || quantity === '') {
-            setError('Please enter item name, original price, discounted price, and quantity.');
+            setError('Please fill item name, original price, discounted price, and quantity to generate a barcode and save.');
             return;
         }
         if (isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseInt(quantity, 10))) {
@@ -136,30 +220,23 @@ const AddProductPage = () => {
 
         setIsGeneratingBarcode(true);
         setError('');
-        toast.loading('Generating barcode and adding item...', { id: 'add-item' });
+        toast.loading('Generating barcode and saving item...', { id: 'save-product' });
 
         try {
-            // Step 1: Generate a new barcode
-            const barcodeResponse = await fetch('/api/generateBarcode', { // Assuming /api/generateBarcode endpoint
+            const barcodeResponse = await fetch('/api/generateBarcode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}), // May or may not need a body depending on your API
+                body: JSON.stringify({}),
             });
-
             const barcodeData = await barcodeResponse.json();
 
             if (!barcodeResponse.ok) {
-                setError(barcodeData.error || "Failed to generate barcode");
-                toast.error(barcodeData.error || "Failed to generate barcode", { id: 'add-item' });
-                setIsGeneratingBarcode(false);
-                return;
+                throw new Error(barcodeData.error || "Failed to generate barcode");
             }
-
             const newBarcode = barcodeData.barcode;
-            setBarcode(newBarcode); // Update barcode state
+            setBarcode(newBarcode);
 
-            // Step 2: Add the product to inventory with the new barcode
-            const productResponse = await fetch('/api/products', { // Your /api/products POST endpoint
+            const productResponse = await fetch('/api/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -170,33 +247,24 @@ const AddProductPage = () => {
                     barcode: newBarcode,
                 }),
             });
-
             const productData = await productResponse.json();
 
-            if (productResponse.ok) {
-                // Update global inventory state
-                setInventoryItems(prevItems => [...prevItems, productData.product]);
-                toast.success('New item generated and added successfully!', { id: 'add-item' });
-                // Reset form fields
-                setBarcode('');
-                setItemName('');
-                setOriginalPrice('');
-                setDiscountedPrice('');
-                setQuantity('');
-                setSelectedItem(null);
-                setIsBarcodeSaved(false);
-                barcodeInputRef.current?.focus(); // Re-focus for next input
-            } else {
-                setError(`Error saving product: ${productData.error}`);
-                toast.error(`Error saving product: ${productData.error}`, { id: 'add-item' });
+            if (!productResponse.ok) {
+                throw new Error(productData.error || `Failed to add product.`);
             }
+            // Update InventoryContext
+            setInventoryItems(prevItems => [...prevItems, productData.product]);
+
+            toast.success('New item generated and added successfully!', { id: 'save-product' });
+            handleClearForm();
 
         } catch (err) {
-            setError(`Error during barcode generation or product saving: ${err.message}`);
-            toast.error(`Network error: ${err.message}`, { id: 'add-item' });
+            console.error('Error during barcode generation or product saving:', err);
+            setError(err.message);
+            toast.error(err.message, { id: 'save-product' });
         } finally {
             setIsGeneratingBarcode(false);
-            toast.dismiss('add-item');
+            toast.dismiss('save-product');
         }
     };
 
@@ -204,7 +272,7 @@ const AddProductPage = () => {
         router.back();
     };
 
-    const isFormValid = itemName.trim() && originalPrice !== '' && discountedPrice !== '' && quantity !== '';
+    const isFormReadyForAction = itemName.trim() && originalPrice !== '' && discountedPrice !== '' && quantity !== '';
 
     return (
         <div className="bg-white relative text-black w-full min-h-screen">
@@ -219,12 +287,13 @@ const AddProductPage = () => {
                 <div className="w-full max-w-2xl shadow-lg bg-white rounded-lg p-6">
                     <div className="mb-4">
                         <h1 className="text-2xl font-semibold text-gray-800 flex items-center">
-                            <Barcode className="mr-2 text-[#615FFF]" /> Barcode Management
+                            <Barcode className="mr-2 text-[#615FFF]" /> Product Inventory
                         </h1>
-                        <p className="text-gray-500 text-sm">Scan barcode or search for item</p>
+                        <p className="text-gray-500 text-sm">Scan barcode, search by name, or add a new product.</p>
                     </div>
 
                     <div className="space-y-4">
+                        {/* Barcode Input Section */}
                         <div className="flex items-center gap-4">
                             <input
                                 ref={barcodeInputRef}
@@ -232,35 +301,25 @@ const AddProductPage = () => {
                                 placeholder="Scan barcode or enter manually"
                                 value={barcode}
                                 onChange={(e) => {
-                                    setBarcode(e.target.value);
-                                    // If barcode input changes after a product was loaded, reset fields
-                                    if (isBarcodeSaved && e.target.value !== selectedItem?.barcode?.toString()) {
-                                        setSelectedItem(null);
+                                    const newBarcode = e.target.value;
+                                    setBarcode(newBarcode);
+                                    debouncedLookupProduct(newBarcode);
+                                    if (selectedItem && newBarcode !== selectedItem.barcode?.toString()) {
                                         setItemName('');
                                         setOriginalPrice('');
                                         setDiscountedPrice('');
                                         setQuantity('');
-                                        setIsBarcodeSaved(false);
-                                        setSearchResults([]); // Clear search results as barcode input changed
+                                        setQuantityChange('');
+                                        setSelectedItem(null);
+                                        setIsProductFound(false);
+                                        setError('');
                                     }
                                 }}
-                                onKeyDown={handleBarcodeInputKeyDown}
                                 className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
                             {barcode && (
                                 <button
-                                    onClick={() => {
-                                        setBarcode('');
-                                        setItemName('');
-                                        setOriginalPrice('');
-                                        setDiscountedPrice('');
-                                        setQuantity('');
-                                        setSelectedItem(null);
-                                        setIsBarcodeSaved(false);
-                                        setSearchResults([]);
-                                        setError('');
-                                        barcodeInputRef.current?.focus();
-                                    }}
+                                    onClick={handleClearForm}
                                     className="px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
                                 >
                                     Clear
@@ -268,62 +327,62 @@ const AddProductPage = () => {
                             )}
                         </div>
 
-                        {/* Show search input and results only if no barcode is currently entered or a product isn't loaded */}
-                        {(!isBarcodeSaved || !barcode) && (
-                            <div className='flex flex-col gap-2'>
-                                <div className="flex items-center w-full gap-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Search for item by name"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="border flex-1 border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
-                                    />
-                                    <button
-                                        onClick={handleSearch}
-                                        className="bg-[#615FFF] cursor-pointer flex items-center  text-white hover:bg-[#4a3fbc] px-4 py-2 rounded-md"
-                                    >
-                                        <Search className="mr-2" /> Search
-                                    </button>
-                                </div>
-
-                                {searchResults.length > 0 && (
-                                    <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
-                                        <ul className="space-y-1">
-                                            {searchResults.map((item, idx) => (
-                                                <li
-                                                    key={idx}
-                                                    onClick={() => handleSelectItem(item)}
-                                                    className="cursor-pointer p-2 rounded-md hover:bg-gray-100 flex items-center justify-between"
-                                                >
-                                                    <span>{item.itemName}</span>
-                                                    {item.barcode ? (
-                                                        <span className="text-gray-500 text-sm">Barcode: {item.barcode}</span>
-                                                    ) : (
-                                                        <span className="text-red-500 text-sm">No Barcode</span>
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
+                        {/* Product Name Search Section */}
+                        <div className='flex flex-col gap-2'>
+                            <div className="flex items-center w-full gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Search for item by name"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="border flex-1 border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                />
+                                <button
+                                    onClick={handleSearchByName}
+                                    className="bg-[#615FFF] cursor-pointer flex items-center  text-white hover:bg-[#4a3fbc] px-4 py-2 rounded-md"
+                                >
+                                    <Search className="mr-2" /> Search
+                                </button>
                             </div>
-                        )}
 
-                        {/* Message if an item is selected from search or found via barcode */}
+                            {searchResults.length > 0 && (
+                                <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
+                                    <ul className="space-y-1">
+                                        {searchResults.map((item, idx) => (
+                                            <li
+                                                key={idx}
+                                                onClick={() => handleSelectItem(item)}
+                                                className="cursor-pointer p-2 rounded-md hover:bg-gray-100 flex items-center justify-between"
+                                            >
+                                                <span>{item.itemName}</span>
+                                                {item.barcode ? (
+                                                    <span className="text-gray-500 text-sm">Barcode: {item.barcode}</span>
+                                                ) : (
+                                                    <span className="text-red-500 text-sm">No Barcode</span>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Product Details Display/Input */}
                         {selectedItem && (
                             <div className="bg-gray-100 p-3 rounded-md border">
-                                Selected Item: <span className="font-semibold">{selectedItem.itemName}</span>
-                                {selectedItem.barcode && <p>Barcode: {selectedItem.barcode}</p>}
-                                <p className="text-sm text-gray-600">
-                                    {isBarcodeSaved ? "Product found. Update details below." : "Item selected from search. Fill details if adding to inventory."}
-                                </p>
+                                <p className="font-semibold text-gray-800">Editing Product: {selectedItem.itemName}</p>
+                                <p className="text-gray-600">Barcode: {selectedItem.barcode}</p>
+                                <p className="text-sm text-gray-700 mt-2">Modify fields below to update details and quantity.</p>
                             </div>
                         )}
-                        {/* Message if a barcode is entered but no product is found for it */}
-                        {barcode && !isBarcodeSaved && (
+                        {barcode && !isProductFound && (
                             <div className="bg-yellow-50 p-3 rounded-md border border-yellow-200 text-yellow-800">
-                                Barcode entered. This barcode does not exist. Fill details to create a new product.
+                                Barcode entered. This barcode does not exist. Fill details to create a **new** product.
+                            </div>
+                        )}
+                        {searchQuery && searchResults.length === 0 && !selectedItem && (
+                            <div className="bg-red-50 p-3 rounded-md border border-red-200 text-red-800">
+                                No matching item found for "{searchQuery}". You can fill details to create a new one.
                             </div>
                         )}
 
@@ -362,20 +421,32 @@ const AddProductPage = () => {
                         {error && <p className="text-red-500 text-sm">{error}</p>}
                     </div>
 
-                    <div className="mt-4">
-                        <button
-                            onClick={handleGenerateBarcodeAndAddItem}
-                            className="bg-[#615FFF] text-white hover:bg-[#4a3fbc] px-6 py-3 flex items-center justify-center gap-1 rounded-md cursor-pointer w-full"
-                            disabled={isGeneratingBarcode || !isFormValid}
-                        >
-                            {isGeneratingBarcode ? (
-                                <>Generating...</>
-                            ) : (
-                                <>
-                                    <PlusCircle className="mr-2" /> Generate Barcode & Add Item
-                                </>
-                            )}
-                        </button>
+                    <div className="mt-4 flex flex-col gap-3">
+                        {isProductFound && barcode && (
+                            <button
+                                onClick={handleUpdateProduct}
+                                className="bg-green-600 text-white hover:bg-green-700 px-6 py-3 flex items-center justify-center gap-1 cursor-pointer rounded-md w-full"
+                                disabled={!isFormReadyForAction}
+                            >
+                                <CheckCircle className="mr-2" /> Update Product
+                            </button>
+                        )}
+
+                        {!isProductFound && (
+                            <button
+                                onClick={handleGenerateBarcodeAndSave}
+                                className="bg-[#615FFF] text-white hover:bg-[#4a3fbc] px-6 py-3 flex items-center justify-center gap-1 rounded-md cursor-pointer w-full"
+                                disabled={isGeneratingBarcode || !isFormReadyForAction}
+                            >
+                                {isGeneratingBarcode ? (
+                                    <>Generating...</>
+                                ) : (
+                                    <>
+                                        <PlusCircle className="mr-2" /> Generate Barcode & Save New Product
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -384,3 +455,4 @@ const AddProductPage = () => {
 };
 
 export default AddProductPage;
+
