@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Search, Barcode, PlusCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Search, Barcode, PlusCircle, CheckCircle, Save, Sparkles } from 'lucide-react'; // Added Save and Sparkles icons
 import { useInventory } from '@/context/inventoryContext';
 import searchInventoryItems from '@/lib/searchInventoryItems';
 import toast from 'react-hot-toast';
@@ -24,7 +24,7 @@ const AddProductPage = () => {
     const [itemName, setItemName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
-    const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
+    const [isSavingNewProduct, setIsSavingNewProduct] = useState(false); // Renamed from isGeneratingBarcode for clarity
     const [error, setError] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
     const [isProductFound, setIsProductFound] = useState(false);
@@ -47,7 +47,7 @@ const AddProductPage = () => {
     const lookupProductByBarcode = useCallback(async (scannedBarcode) => {
         setError('');
         setSelectedItem(null);
-        setIsProductFound(false);
+        setIsProductFound(false); // Reset product found status
         if (!scannedBarcode) {
             toast.dismiss('barcode-lookup');
             return;
@@ -76,18 +76,17 @@ const AddProductPage = () => {
                 setOriginalPrice(product.originalPrice?.toString() || '');
                 setDiscountedPrice(product.discountedPrice?.toString() || '');
                 setQuantity(product.quantity?.toString() || '');
-                setIsProductFound(true);
+                setIsProductFound(true); // Product found in inventory
                 setSearchResults([]);
                 toast.success(`Product found: ${product.itemName}`, { id: 'barcode-lookup' });
             } else if (response.status === 404) {
-                if (!selectedItem) {
-                    setItemName('');
-                    setOriginalPrice('');
-                    setDiscountedPrice('');
-                    setQuantity('');
-                }
+                // Product not found, clear selected item and prepare for new product entry
+                setItemName('');
+                setOriginalPrice('');
+                setDiscountedPrice('');
+                setQuantity('');
                 setSelectedItem(null);
-                setIsProductFound(false);
+                setIsProductFound(false); // Product NOT found
                 toast.error(`No product found for barcode: ${scannedBarcode}. Please fill details to add it.`, { id: 'barcode-lookup' });
             } else {
                 setError(data.error || `Error looking up barcode: ${response.status}`);
@@ -99,7 +98,7 @@ const AddProductPage = () => {
         } finally {
             toast.dismiss('barcode-lookup');
         }
-    }, [selectedItem]);
+    }, [selectedItem]); // Dependency on selectedItem might be removed if it causes issues, but it's fine for now.
 
     const debouncedLookupProduct = useCallback(debounce(lookupProductByBarcode, 300), [lookupProductByBarcode]);
 
@@ -180,6 +179,7 @@ const AddProductPage = () => {
                 }
             }
 
+            // Assuming /api/addProduct is for PUT/UPDATE
             const res = await fetch(`/api/addProduct`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -199,7 +199,7 @@ const AddProductPage = () => {
             }
 
             toast.success('Product updated successfully!', { id: 'update-product' });
-            handleClearForm();
+            handleClearForm(); // Clear form after successful update
 
         } catch (err) {
             console.error('Error updating product:', err);
@@ -208,9 +208,10 @@ const AddProductPage = () => {
         }
     };
 
-    const handleGenerateBarcodeAndSave = async () => {
+    // Renamed from handleGenerateBarcodeAndSave to reflect new logic
+    const handleSaveNewProduct = async () => {
         if (!itemName.trim() || originalPrice === '' || discountedPrice === '' || quantity === '') {
-            setError('Please fill item name, original price, discounted price, and quantity to generate a barcode and save.');
+            setError('Please fill item name, original price, discounted price, and quantity to save.');
             return;
         }
         if (isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseInt(quantity, 10))) {
@@ -218,24 +219,30 @@ const AddProductPage = () => {
             return;
         }
 
-        setIsGeneratingBarcode(true);
+        setIsSavingNewProduct(true); // Set loading state for saving
         setError('');
-        toast.loading('Generating barcode and saving item...', { id: 'save-product' });
+        toast.loading('Saving product...', { id: 'save-product' });
+
+        let finalBarcode = barcode ? parseInt(barcode, 10) : null; // Use existing barcode if present
 
         try {
-            const barcodeResponse = await fetch('/api/generateBarcode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-            });
-            const barcodeData = await barcodeResponse.json();
+            // Only generate a new barcode if the 'barcode' state is empty
+            if (!finalBarcode) {
+                const barcodeResponse = await fetch('/api/generateBarcode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const barcodeData = await barcodeResponse.json();
 
-            if (!barcodeResponse.ok) {
-                throw new Error(barcodeData.error || "Failed to generate barcode");
+                if (!barcodeResponse.ok) {
+                    throw new Error(barcodeData.error || "Failed to generate barcode");
+                }
+                finalBarcode = barcodeData.barcode;
+                setBarcode(finalBarcode.toString()); // Update barcode state with newly generated one
             }
-            const newBarcode = barcodeData.barcode;
-            setBarcode(newBarcode);
 
+            // Use /api/products for POST/CREATE
             const productResponse = await fetch('/api/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -244,7 +251,7 @@ const AddProductPage = () => {
                     quantity: parseInt(quantity, 10),
                     originalPrice: parseFloat(originalPrice),
                     discountedPrice: parseFloat(discountedPrice),
-                    barcode: newBarcode,
+                    barcode: finalBarcode, // Use the determined finalBarcode
                 }),
             });
             const productData = await productResponse.json();
@@ -255,15 +262,15 @@ const AddProductPage = () => {
             // Update InventoryContext
             setInventoryItems(prevItems => [...prevItems, productData.product]);
 
-            toast.success('New item generated and added successfully!', { id: 'save-product' });
-            handleClearForm();
+            toast.success('New item added successfully!', { id: 'save-product' });
+            handleClearForm(); // Clear form after successful save
 
         } catch (err) {
-            console.error('Error during barcode generation or product saving:', err);
+            console.error('Error during product saving:', err);
             setError(err.message);
             toast.error(err.message, { id: 'save-product' });
         } finally {
-            setIsGeneratingBarcode(false);
+            setIsSavingNewProduct(false); // Reset loading state
             toast.dismiss('save-product');
         }
     };
@@ -272,6 +279,7 @@ const AddProductPage = () => {
         router.back();
     };
 
+    // Check if the form has enough data to attempt a save/update action
     const isFormReadyForAction = itemName.trim() && originalPrice !== '' && discountedPrice !== '' && quantity !== '';
 
     return (
@@ -303,8 +311,11 @@ const AddProductPage = () => {
                                 onChange={(e) => {
                                     const newBarcode = e.target.value;
                                     setBarcode(newBarcode);
-                                    debouncedLookupProduct(newBarcode);
-                                    if (selectedItem && newBarcode !== selectedItem.barcode?.toString()) {
+                                    // Only trigger lookup if barcode is not empty
+                                    if (newBarcode.length > 0) {
+                                        debouncedLookupProduct(newBarcode);
+                                    } else {
+                                        // If barcode input is cleared, reset form fields for new entry
                                         setItemName('');
                                         setOriginalPrice('');
                                         setDiscountedPrice('');
@@ -432,17 +443,25 @@ const AddProductPage = () => {
                             </button>
                         )}
 
-                        {!isProductFound && (
+                        {!isProductFound && ( // Only show this button if product is NOT found
                             <button
-                                onClick={handleGenerateBarcodeAndSave}
+                                onClick={handleSaveNewProduct} // Call the modified save function
                                 className="bg-[#615FFF] text-white hover:bg-[#4a3fbc] px-6 py-3 flex items-center justify-center gap-1 rounded-md cursor-pointer w-full"
-                                disabled={isGeneratingBarcode || !isFormReadyForAction}
+                                disabled={isSavingNewProduct || !isFormReadyForAction} // Use new loading state
                             >
-                                {isGeneratingBarcode ? (
-                                    <>Generating...</>
+                                {isSavingNewProduct ? (
+                                    <>Saving...</>
                                 ) : (
                                     <>
-                                        <PlusCircle className="mr-2" /> Generate Barcode & Save New Product
+                                        {barcode ? ( // Dynamic button text based on barcode presence
+                                            <>
+                                                <Save className="mr-2" /> Save New Product with Scanned Barcode
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="mr-2" /> Generate Barcode & Save New Product
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </button>
@@ -455,4 +474,3 @@ const AddProductPage = () => {
 };
 
 export default AddProductPage;
-
