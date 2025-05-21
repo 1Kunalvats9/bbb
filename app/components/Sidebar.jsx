@@ -7,6 +7,7 @@ const navLinks = [
     { name: 'Dashboard', href: '/dashboard' },
     { name: 'Add Product', href: '/addProduct' },
     { name: 'Customer History', href: '/customerHistory' },
+    {name:'Sell',href:'/barcodeScanCart'},
     { name: 'Cart', href: '/cart' },
 ];
 
