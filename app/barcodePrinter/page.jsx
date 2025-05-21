@@ -6,14 +6,21 @@ import searchInventoryItems from '@/lib/searchInventoryItems'; // Assuming this 
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 
-// Import JsBarcode library via CDN (it will be available globally as JsBarcode)
-// We'll load this script dynamically or assume it's loaded in _document.js or similar.
-// For this immersive, we'll simulate its availability. In a real Next.js app,
-// you might add <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-// in your _document.js or a specific layout.
-// For demonstration, we'll assume JsBarcode is available.
+// Debounce Utility Function - ADDED THIS SECTION
+const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+        timeoutId = setTimeout(() => {
+            func.apply(null, args);
+        }, delay);
+    };
+};
 
 const BarcodeLabelPrinterPage = () => {
+    const [scannedBarcode, setScannedBarcode] = useState(''); // State for the barcode input
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -23,9 +30,11 @@ const BarcodeLabelPrinterPage = () => {
 
     const { inventoryItems } = useInventory(); // Get inventory items from context
     const router = useRouter();
-    const printAreaRef = useRef(null); // Ref for the hidden print area
+    const barcodeInputRef = useRef(null); // Ref for the barcode input field
+    const printAreaRef = useRef(null); // Ref for the temporary hidden print area
 
     // Effect to load JsBarcode if it's not already global (for client-side rendering)
+    // This useEffect has been moved inside the component body.
     useEffect(() => {
         if (typeof window !== 'undefined' && typeof window.JsBarcode === 'undefined') {
             const script = document.createElement('script');
@@ -35,12 +44,69 @@ const BarcodeLabelPrinterPage = () => {
             script.onerror = () => console.error('Failed to load JsBarcode script.');
             document.body.appendChild(script);
             return () => {
-                document.body.removeChild(script);
+                if (document.body.contains(script)) {
+                    document.body.removeChild(script);
+                }
             };
+        }
+    }, []); // Empty dependency array means it runs once on mount
+
+    useEffect(() => {
+        if (barcodeInputRef.current) {
+            barcodeInputRef.current.focus();
         }
     }, []);
 
-    // Handle search for inventory items
+    // --- Core Barcode Lookup Function (for auto-filling) ---
+    const lookupProductByBarcode = useCallback(async (barcodeValue) => {
+        setError('');
+        setSelectedProduct(null); // Clear any previously selected product
+        if (!barcodeValue) {
+            toast.dismiss('barcode-lookup');
+            return;
+        }
+
+        const barcodeNumber = parseInt(barcodeValue, 10);
+        if (isNaN(barcodeNumber)) {
+            setError('Invalid barcode: Barcode must be a number.');
+            toast.error('Invalid barcode format.', { id: 'barcode-lookup' });
+            return;
+        }
+
+        toast.loading(`Searching for barcode: ${barcodeValue}...`, { id: 'barcode-lookup' });
+        try {
+            const response = await fetch('/api/scanBarcode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ barcode: barcodeNumber }),
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                const product = data.product;
+                setSelectedProduct(product); // Auto-select the product
+                setSearchQuery(product.itemName); // Fill search query with item name
+                setLabelQuantity(1); // Reset quantity to 1 for new selection
+                setSearchResults([]); // Clear search results
+                toast.success(`Product found: ${product.itemName}`, { id: 'barcode-lookup' });
+            } else if (response.status === 404) {
+                setSelectedProduct(null);
+                toast.error(`No product found for barcode: ${barcodeValue}.`, { id: 'barcode-lookup' });
+            } else {
+                setError(data.error || `Error looking up barcode: ${response.status}`);
+                toast.error(`Error: ${data.error || 'Unknown error'}`, { id: 'barcode-lookup' });
+            }
+        } catch (err) {
+            setError(`Network error: ${err.message}`);
+            toast.error(`Network error: ${err.message}`, { id: 'barcode-lookup' });
+        } finally {
+            toast.dismiss('barcode-lookup');
+        }
+    }, []);
+
+    const debouncedLookupProduct = useCallback(debounce(lookupProductByBarcode, 300), [lookupProductByBarcode]);
+
+    // Handle search for inventory items by name or barcode
     const handleSearch = () => {
         if (!searchQuery.trim()) {
             setError('Please enter a search query (name or barcode).');
@@ -79,6 +145,7 @@ const BarcodeLabelPrinterPage = () => {
     // Handle selection of a product from search results
     const handleSelectItem = (item) => {
         setSelectedProduct(item);
+        setScannedBarcode(item.barcode?.toString() || ''); // Set the barcode input
         setSearchQuery(item.itemName); // Pre-fill search query with item name
         setSearchResults([]); // Clear search results
         setError('');
@@ -97,6 +164,7 @@ const BarcodeLabelPrinterPage = () => {
         }
         if (typeof window.JsBarcode === 'undefined') {
             setError('Barcode generation library not loaded. Please try again or refresh.');
+            toast.error("Barcode generation library not loaded.", { id: 'print-labels' });
             return;
         }
 
@@ -117,7 +185,7 @@ const BarcodeLabelPrinterPage = () => {
             // Each label will have a unique ID for JsBarcode to target
             const barcodeId = `barcode-${selectedProduct.barcode}-${i}`;
             labelsHtml += `
-                <div style="
+                <div class="label" style="
                     width: 2.5in; /* Standard label width, adjust as needed */
                     height: 1in;  /* Standard label height, adjust as needed */
                     border: 1px solid #ccc;
@@ -129,14 +197,14 @@ const BarcodeLabelPrinterPage = () => {
                     box-sizing: border-box;
                     page-break-inside: avoid; /* Prevent breaking labels across pages */
                 ">
-                    <p style="font-size: 0.7em; font-weight: bold; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    <p class="item-name" style="font-size: 0.7em; font-weight: bold; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                         ${selectedProduct.itemName}
                     </p>
-                    <p style="font-size: 0.8em; font-weight: bold; margin-bottom: 5px;">
+                    <p class="price" style="font-size: 0.8em; font-weight: bold; margin-bottom: 5px;">
                         ₹${(selectedProduct.discountedPrice || selectedProduct.originalPrice || 0).toFixed(2)}
                     </p>
                     <svg id="${barcodeId}" style="width: 100%; height: 50px;"></svg>
-                    <p style="font-size: 0.6em; margin-top: 2px;">
+                    <p class="barcode-text" style="font-size: 0.6em; margin-top: 2px;">
                         ${selectedProduct.barcode}
                     </p>
                 </div>
@@ -265,15 +333,12 @@ const BarcodeLabelPrinterPage = () => {
 
             // Wait for the content to load and then print
             printWindow.focus(); // Focus the new window
-            // No need for setTimeout here as the script in the new window handles printing on load.
 
             toast.success('Labels prepared. Please use your browser\'s print dialog.', { id: 'print-labels', duration: 5000 });
 
         }, 100); // Small delay to ensure DOM update
 
         // Cleanup the temporary div after printing (or after a short delay)
-        // Note: Actual cleanup might need to happen after the print dialog is closed,
-        // which is hard to detect. A simple setTimeout is a workaround.
         setTimeout(() => {
             if (printAreaRef.current && document.body.contains(printAreaRef.current)) {
                 document.body.removeChild(printAreaRef.current);
@@ -303,50 +368,101 @@ const BarcodeLabelPrinterPage = () => {
                         <h1 className="text-2xl font-semibold text-gray-800 flex items-center">
                             <Tag className="mr-2 text-[#615FFF]" /> Print Barcode Labels
                         </h1>
-                        <p className="text-gray-500 text-sm">Search for products and print their barcode labels.</p>
+                        <p className="text-gray-500 text-sm">Scan barcode or search for products to print labels.</p>
                     </div>
 
                     <div className="space-y-4">
-                        {/* Search Input Section */}
-                        <div className="flex items-center w-full gap-2">
+                        {/* Barcode Input Section - Auto-fills on scan */}
+                        <div className="flex items-center gap-4">
                             <input
+                                ref={barcodeInputRef}
                                 type="text"
-                                placeholder="Search by item name or barcode"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyPress={(e) => {
-                                    if (e.key === 'Enter') handleSearch();
+                                placeholder="Scan barcode here..."
+                                value={scannedBarcode}
+                                onChange={(e) => {
+                                    const newBarcode = e.target.value;
+                                    setScannedBarcode(newBarcode);
+                                    // Trigger lookup only if a barcode value is present
+                                    if (newBarcode.length > 0) {
+                                        debouncedLookupProduct(newBarcode);
+                                    } else {
+                                        // If input is cleared, reset states
+                                        setSelectedProduct(null);
+                                        setSearchQuery('');
+                                        setSearchResults([]);
+                                        setError('');
+                                        setLabelQuantity(1);
+                                    }
                                 }}
-                                className="border flex-1 border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        if (scannedBarcode.length > 0) {
+                                            lookupProductByBarcode(scannedBarcode); // Call directly without debounce for Enter
+                                        }
+                                    }
+                                }}
+                                className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
-                            <button
-                                onClick={handleSearch}
-                                className="bg-[#615FFF] cursor-pointer flex items-center text-white hover:bg-[#4a3fbc] px-4 py-2 rounded-md"
-                            >
-                                <Search className="mr-2" /> Search
-                            </button>
+                            {scannedBarcode && (
+                                <button
+                                    onClick={() => {
+                                        setScannedBarcode('');
+                                        setSelectedProduct(null);
+                                        setSearchQuery('');
+                                        setSearchResults([]);
+                                        setError('');
+                                        setLabelQuantity(1);
+                                        barcodeInputRef.current?.focus();
+                                    }}
+                                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                >
+                                    Clear
+                                </button>
+                            )}
                         </div>
 
-                        {searchResults.length > 0 && (
-                            <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
-                                <ul className="space-y-1">
-                                    {searchResults.map((item, idx) => (
-                                        <li
-                                            key={item.barcode || idx} // Use barcode as key if available
-                                            onClick={() => handleSelectItem(item)}
-                                            className="cursor-pointer p-2 rounded-md hover:bg-gray-100 flex items-center justify-between"
-                                        >
-                                            <span>{item.itemName}</span>
-                                            {item.barcode ? (
-                                                <span className="text-gray-500 text-sm">Barcode: {item.barcode}</span>
-                                            ) : (
-                                                <span className="text-red-500 text-sm">No Barcode</span>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
+                        {/* Product Name Search Section */}
+                        <div className='flex flex-col gap-2'>
+                            <div className="flex items-center w-full gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Search for item by name"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter') handleSearch();
+                                    }}
+                                    className="border flex-1 border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                />
+                                <button
+                                    onClick={handleSearch}
+                                    className="bg-[#615FFF] cursor-pointer flex items-center text-white hover:bg-[#4a3fbc] px-4 py-2 rounded-md"
+                                >
+                                    <Search className="mr-2" /> Search
+                                </button>
                             </div>
-                        )}
+
+                            {searchResults.length > 0 && (
+                                <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
+                                    <ul className="space-y-1">
+                                        {searchResults.map((item, idx) => (
+                                            <li
+                                                key={item.barcode || idx}
+                                                onClick={() => handleSelectItem(item)}
+                                                className="cursor-pointer p-2 rounded-md hover:bg-gray-100 flex items-center justify-between"
+                                            >
+                                                <span>{item.itemName}</span>
+                                                {item.barcode ? (
+                                                    <span className="text-gray-500 text-sm">Barcode: {item.barcode}</span>
+                                                ) : (
+                                                    <span className="text-red-500 text-sm">No Barcode</span>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
 
                         {error && <p className="text-red-500 text-sm">{error}</p>}
 
