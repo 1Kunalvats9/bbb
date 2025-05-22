@@ -186,11 +186,11 @@ const BarcodeLabelPrinterPage = () => {
             const barcodeId = `barcode-${selectedProduct.barcode}-${i}`;
             labelsHtml += `
                 <div class="label" style="
-                    width: 2.5in; /* Standard label width, adjust as needed */
+                    width: 2.4in; /* Standard label width, adjust as needed */
                     height: 1in;  /* Standard label height, adjust as needed */
                     border: 1px solid #ccc;
-                    padding: 5px;
-                    margin: 5px;
+                    padding: 0px;
+                    margin: 0px;
                     display: inline-block; /* For multiple labels per row */
                     text-align: center;
                     font-family: 'Inter', sans-serif;
