@@ -51,11 +51,12 @@ const BarcodeScannerCartPage = () => {
         const barcodeNumber = parseInt(barcode, 10);
         if (isNaN(barcodeNumber)) {
             toast.error('Invalid barcode format.', { id: 'barcode-scan' });
+            setScannedBarcode(''); // Clear input on invalid format
+            barcodeInputRef.current?.focus();
             return;
         }
 
-        // Check if the product is already in the cart *before* making an API call if possible
-        // This is an optimization if inventoryItems context is sufficiently populated
+        // Check if the product is already in the cart
         const existingCartItem = cartItems.find(item => item.barcode === barcodeNumber);
 
         if (existingCartItem) {
@@ -109,7 +110,7 @@ const BarcodeScannerCartPage = () => {
         }
     }, [setCartItems, cartItems]); // Added cartItems to dependency array
 
-    const debouncedLookupAndAddToCart = useCallback(debounce(lookupProductAndAddToCart, 300), [lookupProductAndAddToCart]);
+    // Removed debouncedLookupAndAddToCart as it will now be triggered only on Enter key press
 
     const handleQuantityChange = (barcode, newQuantity) => {
         const parsedQuantity = parseInt(newQuantity, 10);
@@ -229,18 +230,15 @@ const BarcodeScannerCartPage = () => {
                                 placeholder="Scan barcode here..."
                                 value={scannedBarcode}
                                 onChange={(e) => {
-                                    const newBarcode = e.target.value;
-                                    setScannedBarcode(newBarcode);
-                                    // Trigger lookup only if a barcode value is present
-                                    if (newBarcode.length > 0) {
-                                        debouncedLookupAndAddToCart(newBarcode);
-                                    }
+                                    // Only update the state on change
+                                    setScannedBarcode(e.target.value);
                                 }}
-                                // Handle Enter key for manual input/testing (optional, but good practice)
+                                // Handle Enter key for manual input/testing or scanner input
                                 onKeyPress={(e) => {
                                     if (e.key === 'Enter') {
                                         if (scannedBarcode.length > 0) {
-                                            lookupProductAndAddToCart(scannedBarcode); // Call directly without debounce for Enter
+                                            // Call the lookup function directly on Enter
+                                            lookupProductAndAddToCart(scannedBarcode);
                                         }
                                     }
                                 }}

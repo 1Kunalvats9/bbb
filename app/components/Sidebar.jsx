@@ -8,6 +8,7 @@ const navLinks = [
     { name: 'Add Product', href: '/addProduct' },
     { name: 'Customer History', href: '/customerHistory' },
     {name:'Sell',href:'/barcodeScanCart'},
+    {name:'Print Barcodes',href:'/barcodePrinter'},
     { name: 'Cart', href: '/cart' },
 ];
 
