@@ -219,6 +219,7 @@ const BarcodeLabelPrinterPage = () => {
                 if (barcodeElement) {
                     try {
                         // JsBarcode(element, data, options)
+                        console.log(String(selectedProduct.barcode))
                         window.JsBarcode(barcodeElement, String(selectedProduct.barcode), {
                             format: "EAN13", // Common retail barcode format
                             displayValue: false, // Don't display the number below the barcode (we'll add it manually)

@@ -33,6 +33,7 @@ export async function POST(req) {
     }
 
     const foundProduct = globalInventoryDoc.inventory[0];
+    console.log(foundProduct)
     return NextResponse.json({
       message: 'Product with this barcode exists',
       product: {
