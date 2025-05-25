@@ -326,7 +326,7 @@ const AddProductPage = () => {
                                         setError('');
                                     }
                                 }}
-                                className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                 className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
                             {barcode && (
                                 <button

@@ -1,15 +1,22 @@
 "use client"
-import { Edit, Trash } from 'lucide-react';
+import { Edit } from 'lucide-react';
 import React, { useState } from 'react';
 import { useCart } from '@/context/cartContext';
+import { useInventory } from '@/context/inventoryContext';
+import toast from 'react-hot-toast';
 
-
-const InventoryProductCard = ({ itemName, availableQuantity, price }) => {
+const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price, itemId }) => {
     const [quantityInput, setQuantityInput] = useState("1");
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editedItemName, setEditedItemName] = useState(itemName);
+    const [editedPrice, setEditedPrice] = useState(price);
+    const [editedQuantity, setEditedQuantity] = useState(availableQuantity);
+
     const { setCartItems } = useCart();
+    const { setInventoryItems } = useInventory();
 
     const handleAddToCart = () => {
-        const quantity = parseInt(quantityInput, 10); 
+        const quantity = parseInt(quantityInput, 10);
 
         if (isNaN(quantity) || quantity <= 0 || quantity > availableQuantity) {
             alert(`Please enter a valid quantity between 1 and ${availableQuantity}.`);
@@ -27,50 +34,91 @@ const InventoryProductCard = ({ itemName, availableQuantity, price }) => {
                 return [...prevItems, { itemName, quantity, price }];
             }
         });
-        setQuantityInput("1"); 
+        setQuantityInput("1");
     };
 
     const handleQuantityInputChange = (e) => {
         const value = e.target.value;
-        // Allow empty string or string representation of numbers for user input flexibility
         if (value === "" || /^\d+$/.test(value)) {
             setQuantityInput(value);
         }
-        // You could add more sophisticated validation here if needed,
-        // but the main validation happens on `handleAddToCart`.
     };
 
     const handleBlurOrEnter = (e) => {
         if (e.type === 'blur' || e.key === 'Enter') {
             let value = parseInt(quantityInput, 10);
             if (isNaN(value) || value < 1) {
-                value = 1; 
+                value = 1;
             } else if (value > availableQuantity) {
-                value = availableQuantity; 
+                value = availableQuantity;
             }
-            setQuantityInput(String(value)); 
+            setQuantityInput(String(value));
         }
     };
 
+    const handleEditClick = () => {
+        setIsEditModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsEditModalOpen(false);
+    };
+
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await fetch(`/api/updateInventoryProduct`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    itemId: itemId,
+                    itemName: editedItemName,
+                    price: parseFloat(editedPrice),
+                    quantity: parseInt(editedQuantity, 10),
+                }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.message || `Failed to update item: ${res.status}`);
+            }
+
+            const updatedProduct = await res.json();
+            
+            setInventoryItems(prevItems =>
+                prevItems.map(item =>
+                    item._id === itemId ? { ...item, itemName: editedItemName, discountedPrice: parseFloat(editedPrice), quantity: parseInt(editedQuantity, 10) } : item
+                )
+            );
+            
+            setIsEditModalOpen(false);
+            toast.success('Item updated successfully!')
+
+        } catch (error) {
+            console.error("Error updating item:", error);
+            alert(`Error updating item: ${error.message}`);
+        }
+    };
+
+
     return (
-        <div className="flex items-start justify-between p-4 rounded-lg bg-white shadow-md">
-            <div className='flex flex-col'>
-                <h3 className="text-lg font-semibold text-gray-800">{itemName}</h3>
-                <div className="text-gray-600">
-                    Available: <span className="font-medium text-blue-600">{availableQuantity}</span>
-                </div>
-                <div className="text-xl font-bold text-green-600">
-                    ₹{price.toFixed(2)}
-                </div>
+        <div className="w-full grid grid-cols-[50px_2fr_1fr_1fr_1.5fr_0.5fr] items-center gap-4 p-3 rounded-lg bg-white shadow-sm border border-gray-200 text-black">
+            <div className="text-gray-800 font-medium">{serialNumber}.</div>
+            <div className="font-semibold text-gray-800">{itemName}</div>
+            <div className="font-bold text-green-600">₹{price.toFixed(2)}</div>
+            <div className="text-gray-600">
+                <span className="font-medium text-blue-600">{availableQuantity}</span>
             </div>
 
             <div className='flex items-center gap-2'>
                 <input
-                    type="text" 
+                    type="text"
                     value={quantityInput}
                     onChange={handleQuantityInputChange}
-                    onBlur={handleBlurOrEnter} 
-                    onKeyPress={(e) => { 
+                    onBlur={handleBlurOrEnter}
+                    onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                             handleBlurOrEnter(e);
                         }
@@ -80,13 +128,74 @@ const InventoryProductCard = ({ itemName, availableQuantity, price }) => {
                 />
                 <button
                     onClick={handleAddToCart}
-                    className="ml-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 text-sm"
                 >
                     Add to Cart
                 </button>
-                <Edit color='#000'/>
-                <Trash color='red' />
             </div>
+
+            <div className='flex justify-center'>
+                <Edit color='#000' className='cursor-pointer hover:text-gray-700' onClick={handleEditClick} />
+            </div>
+
+            {isEditModalOpen && (
+                <div className="fixed inset-0 bg-white/5 bg-opacity-0 backdrop-blur-2xl flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-xl w-96">
+                        <h2 className="text-2xl font-bold mb-4 text-gray-800">Edit Item</h2>
+                        <form onSubmit={handleSaveEdit}>
+                            <div className="mb-4">
+                                <label htmlFor="itemName" className="block text-gray-700 text-sm font-bold mb-2">Item Name:</label>
+                                <input
+                                    type="text"
+                                    id="itemName"
+                                    value={editedItemName}
+                                    onChange={(e) => setEditedItemName(e.target.value)}
+                                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                    required
+                                />
+                            </div>
+                            <div className="mb-4">
+                                <label htmlFor="price" className="block text-gray-700 text-sm font-bold mb-2">Price:</label>
+                                <input
+                                    type="number"
+                                    id="price"
+                                    value={editedPrice}
+                                    onChange={(e) => setEditedPrice(e.target.value)}
+                                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                    step="0.01"
+                                    required
+                                />
+                            </div>
+                            <div className="mb-6">
+                                <label htmlFor="quantity" className="block text-gray-700 text-sm font-bold mb-2">Quantity:</label>
+                                <input
+                                    type="number"
+                                    id="quantity"
+                                    value={editedQuantity}
+                                    onChange={(e) => setEditedQuantity(e.target.value)}
+                                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                    required
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseModal}
+                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline cursor-pointer"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

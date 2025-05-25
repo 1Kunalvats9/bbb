@@ -1,22 +1,27 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
-import DashboardHeroCard from '../components/DashboardHeroCard'
 import { useInventory } from '@/context/inventoryContext'
 import Footer from '../components/Footer'
 import { useAuth } from '@/context/authContext';
-import { useRouter, useSelectedLayoutSegments } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/cartContext'
 import { Search } from 'lucide-react'
-import InventoryProductCard from '../components/InventoryProductCard'
+import InventoryProductCard from "@/app/components/InventoryProductCard"
 
 const Page = () => {
-    const { setInventoryItems } = useInventory(); // Get the setter
+    const { setInventoryItems } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
-    const [localInventoryItems, setLocalInventoryItems] = useState([]); // Use a local state
+    const [localInventoryItems, setLocalInventoryItems] = useState([]);
 
     const { isLoggedIn } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        if (!isLoggedIn) {
+            router.push('/login');
+        }
+    }, [isLoggedIn, router]);
 
     useEffect(() => {
         const fetchInventory = async () => {
@@ -30,27 +35,26 @@ const Page = () => {
                     throw new Error(`Failed to fetch inventory: ${res.status}`);
                 }
                 const data = await res.json();
-                // setInventoryItems(data);
-                setLocalInventoryItems(data); // Update the local state
-                setInventoryItems(data); // Update context
+                setLocalInventoryItems(data);
+                setInventoryItems(data);
 
             } catch (error) {
                 console.error("Error fetching inventory:", error);
-                //  setError("Failed to fetch inventory.");  // Consider setting an error state
             }
         }
-        fetchInventory();
-    }, [setInventoryItems]);
+        if (isLoggedIn) {
+            fetchInventory();
+        }
+    }, [setInventoryItems, isLoggedIn]);
 
     const { cartItems } = useCart()
-    const filteredInventoryItems = localInventoryItems.filter(item =>  // Use local state
+    const filteredInventoryItems = localInventoryItems.filter(item =>
         item.itemName.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     if (!isLoggedIn) {
         return null;
     }
-
 
     return (
         <div className='w-full min-h-screen bg-white'>
@@ -69,21 +73,34 @@ const Page = () => {
                     />
                 </div>
 
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5  w-full'>
+                <div className="w-full grid grid-cols-[50px_2fr_1fr_1fr_1.5fr_0.5fr] gap-4 p-3 rounded-lg bg-gray-200 font-semibold text-gray-700">
+                    <div>S.No.</div>
+                    <div>Item Name</div>
+                    <div>Price</div>
+                    <div>Quantity</div>
+                    <div>Add to Cart</div>
+                    <div>Edit</div>
+                </div>
+
+                <div className='w-full flex flex-col gap-3'>
                     {
                         filteredInventoryItems.length > 0 ?
-                            filteredInventoryItems.map((item) => {
-                                return <InventoryProductCard
-                                    key={item.itemName}
-                                    itemName={item.itemName}
-                                    availableQuantity={item.quantity}
-                                    price={item.discountedPrice}
-                                />
+                            filteredInventoryItems.map((item, index) => {
+                                return (
+                                    <InventoryProductCard
+                                        key={item.itemName}
+                                        serialNumber={index + 1}
+                                        itemName={item.itemName}
+                                        availableQuantity={item.quantity}
+                                        price={item.discountedPrice}
+                                        itemId={item._id}
+                                    />
+                                );
                             }) :
                             searchQuery ? (
-                                <p className='text-black text-xl'>No items found matching "{searchQuery}".</p>
+                                <p className='text-black text-xl text-center w-full'>No items found matching "{searchQuery}".</p>
                             ) : (
-                                <p className='text-black text-xl'>No items in stock. Please add some items.</p>
+                                <p className='text-black text-xl text-center w-full'>No items in stock. Please add some items.</p>
                             )
                     }
                 </div>
