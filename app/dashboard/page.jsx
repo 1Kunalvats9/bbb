@@ -88,7 +88,7 @@ const Page = () => {
                             filteredInventoryItems.map((item, index) => {
                                 return (
                                     <InventoryProductCard
-                                        key={item.itemName}
+                                        key={index}
                                         serialNumber={index + 1}
                                         itemName={item.itemName}
                                         availableQuantity={item.quantity}
