@@ -2,10 +2,10 @@
 import { Edit } from 'lucide-react';
 import React, { useState } from 'react';
 import { useCart } from '@/context/cartContext';
-import { useInventory } from '@/context/inventoryContext';
+// Removed useInventory directly as updates will come via props from parent
 import toast from 'react-hot-toast';
 
-const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price, itemId }) => {
+const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price, itemId, onInventoryUpdate }) => {
     const [quantityInput, setQuantityInput] = useState("1");
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editedItemName, setEditedItemName] = useState(itemName);
@@ -13,13 +13,13 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
     const [editedQuantity, setEditedQuantity] = useState(availableQuantity);
 
     const { setCartItems } = useCart();
-    const { setInventoryItems } = useInventory();
+    // Removed setInventoryItems as updates will be handled by onInventoryUpdate prop
 
     const handleAddToCart = () => {
         const quantity = parseInt(quantityInput, 10);
 
         if (isNaN(quantity) || quantity <= 0 || quantity > availableQuantity) {
-            alert(`Please enter a valid quantity between 1 and ${availableQuantity}.`);
+            toast.error(`Please enter a valid quantity between 1 and ${availableQuantity}.`);
             return;
         }
 
@@ -31,9 +31,15 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
                 updatedItems[existingItemIndex].quantity += quantity;
                 return updatedItems;
             } else {
-                return [...prevItems, { itemName, quantity, price }];
+                return [...prevItems, { itemName, quantity, price, _id: itemId }]; // Ensure _id is passed to cart items
             }
         });
+
+        // Update the inventory context immediately via the prop
+        const newAvailableQuantity = availableQuantity - quantity;
+        onInventoryUpdate(itemId, { quantity: newAvailableQuantity });
+
+        toast.success(`${quantity} x ${itemName} added to cart!`);
         setQuantityInput("1");
     };
 
@@ -62,6 +68,10 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
 
     const handleCloseModal = () => {
         setIsEditModalOpen(false);
+        // Reset edited values to current item values if cancelled
+        setEditedItemName(itemName);
+        setEditedPrice(price);
+        setEditedQuantity(availableQuantity);
     };
 
     const handleSaveEdit = async (e) => {
@@ -85,20 +95,20 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
                 throw new Error(errorData.message || `Failed to update item: ${res.status}`);
             }
 
-            const updatedProduct = await res.json();
-            
-            setInventoryItems(prevItems =>
-                prevItems.map(item =>
-                    item._id === itemId ? { ...item, itemName: editedItemName, discountedPrice: parseFloat(editedPrice), quantity: parseInt(editedQuantity, 10) } : item
-                )
-            );
-            
+            // No need to get updatedProduct from response if the server only confirms success.
+            // Directly update the context with the new values.
+            onInventoryUpdate(itemId, {
+                itemName: editedItemName,
+                discountedPrice: parseFloat(editedPrice), // Assuming 'price' prop maps to 'discountedPrice' in context
+                quantity: parseInt(editedQuantity, 10)
+            });
+
             setIsEditModalOpen(false);
-            toast.success('Item updated successfully!')
+            toast.success('Item updated successfully!');
 
         } catch (error) {
             console.error("Error updating item:", error);
-            alert(`Error updating item: ${error.message}`);
+            toast.error(`Error updating item: ${error.message}`); // Use toast for errors
         }
     };
 
@@ -114,7 +124,9 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
 
             <div className='flex items-center gap-2'>
                 <input
-                    type="text"
+                    type="number" // Changed to type="number" for better mobile input and validation
+                    min="1"
+                    max={availableQuantity} // Set max to available quantity
                     value={quantityInput}
                     onChange={handleQuantityInputChange}
                     onBlur={handleBlurOrEnter}
@@ -128,7 +140,9 @@ const InventoryProductCard = ({ serialNumber, itemName, availableQuantity, price
                 />
                 <button
                     onClick={handleAddToCart}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 text-sm"
+                    // Disable button if quantity is 0 or input is invalid
+                    disabled={availableQuantity <= 0 || parseInt(quantityInput, 10) <= 0 || parseInt(quantityInput, 10) > availableQuantity}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                     Add to Cart
                 </button>

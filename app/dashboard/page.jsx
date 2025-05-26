@@ -3,19 +3,18 @@ import React, { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useInventory } from '@/context/inventoryContext'
 import Footer from '../components/Footer'
-import { useAuth } from '@/context/authContext';
+import { useAuth } from '@/context/authContext'
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/cartContext'
 import { Search } from 'lucide-react'
 import InventoryProductCard from "@/app/components/InventoryProductCard"
 
 const Page = () => {
-    const { setInventoryItems } = useInventory();
+    const { inventoryItems, setInventoryItems, updateInventoryItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [localInventoryItems, setLocalInventoryItems] = useState([]);
     const { isLoggedIn } = useAuth();
     const router = useRouter();
-
     useEffect(() => {
         if (!isLoggedIn) {
             router.push('/login');
@@ -23,34 +22,48 @@ const Page = () => {
     }, [isLoggedIn, router]);
 
     useEffect(() => {
-        const fetchInventory = async () => {
+        const loadInventory = async () => {
+            if (inventoryItems && inventoryItems.length > 0) {
+                setLocalInventoryItems(inventoryItems);
+                console.log("Inventory loaded from context (localStorage).");
+                return; 
+            }
+            console.log("Fetching inventory from server...");
             try {
                 const res = await fetch('/api/getInventoryProducts', {
                     method: 'GET',
-                    'Content-type': 'application/json'
+                    headers: {
+                        'Content-type': 'application/json'
+                    }
                 });
 
                 if (!res.ok) {
                     throw new Error(`Failed to fetch inventory: ${res.status}`);
                 }
                 const data = await res.json();
-                setLocalInventoryItems(data);
-                setInventoryItems(data);
+                setLocalInventoryItems(data); 
+                setInventoryItems(data);     
+                console.log("Inventory fetched from server and updated context.");
 
             } catch (error) {
                 console.error("Error fetching inventory:", error);
             }
-        }
-        if (isLoggedIn) {
-            fetchInventory();
-        }
-    }, [setInventoryItems, isLoggedIn]);
+        };
 
-    const { cartItems } = useCart()
+        if (isLoggedIn) {
+            loadInventory();
+        }
+    }, [isLoggedIn, inventoryItems, setInventoryItems]); 
+                                                        
+                                                    
+    useEffect(() => {
+        setLocalInventoryItems(inventoryItems);
+    }, [inventoryItems]); 
+
+    const { cartItems } = useCart() 
     const filteredInventoryItems = localInventoryItems.filter(item =>
         item.itemName.toLowerCase().includes(searchQuery.toLowerCase())
     );
-
     if (!isLoggedIn) {
         return null;
     }
@@ -87,12 +100,13 @@ const Page = () => {
                             filteredInventoryItems.map((item, index) => {
                                 return (
                                     <InventoryProductCard
-                                        key={index}
+                                        key={item._id || index} 
                                         serialNumber={index + 1}
                                         itemName={item.itemName}
                                         availableQuantity={item.quantity}
                                         price={item.discountedPrice}
                                         itemId={item._id}
+                                        onInventoryUpdate={updateInventoryItem}
                                     />
                                 );
                             }) :
