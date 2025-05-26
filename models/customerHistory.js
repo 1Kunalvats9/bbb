@@ -18,11 +18,11 @@ const productInOrderSchema = new mongoose.Schema({
 }, { _id: false });
 
 const orderHistorySchema= new mongoose.Schema({
-    customerName: {
-        type: String,
-        required: false,
-        default: 'Guest Customer'
-    },
+    // customerName: {
+    //     type: String,
+    //     required: false,
+    //     default: 'Guest Customer'
+    // },
     customerPhoneNumber: {
         type: String,
         required: false,

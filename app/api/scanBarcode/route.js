@@ -23,7 +23,7 @@ export async function POST(req) {
       _id: 0 
     });
 
-    if (!globalInventoryDoc) { // Check if the entire document is null
+    if (!globalInventoryDoc) {
       console.log('Product with this barcode does not exist')
       return NextResponse.json({ message: 'Product with this barcode does not exist' }, { status: 404 });
     }

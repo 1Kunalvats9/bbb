@@ -18,7 +18,9 @@ const debounce = (func, delay) => {
     };
 };
 
-const Invoice = React.forwardRef(({ cartItems, customerName, customerPhone, totalAmount, invoiceDateTime }, ref) => {
+{/*removed customerName from function */}
+
+const Invoice = React.forwardRef(({ cartItems, customerPhone, totalAmount, invoiceDateTime }, ref) => {
     const date = invoiceDateTime ? new Date(invoiceDateTime) : new Date();
     const formattedDate = date.toLocaleDateString('en-IN');
     const formattedTime = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -32,7 +34,7 @@ const Invoice = React.forwardRef(({ cartItems, customerName, customerPhone, tota
             </div>
 
             <div className="mb-4 border-b pb-2 print:mb-1 print:pb-1 print:border-b print:border-dashed">
-                <p className="font-semibold print:text-xs">Customer: {customerName || 'N/A'}</p>
+                {/* <p className="font-semibold print:text-xs">Customer: {customerName || 'N/A'}</p> */}
                 <p className="font-semibold print:text-xs">Phone: {customerPhone || 'N/A'}</p>
                 <p className="font-semibold print:text-xs">Date: {formattedDate}</p>
                 <p className="font-semibold print:text-xs">Time: {formattedTime}</p>
@@ -78,7 +80,7 @@ const BarcodeScannerCartPage = () => {
     const [isSearching, setIsSearching] = useState(false); // New state for search loading
     const { inventoryItems } = useInventory(); // Assuming inventoryItems might be used for client-side filtering if API not ready
     const { cartItems, setCartItems } = useCart();
-    const [customerName, setCustomerName] = useState('');
+    // const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const [loadingCheckout, setLoadingCheckout] = useState(false);
     const [checkoutMessage, setCheckoutMessage] = useState('');
@@ -248,7 +250,7 @@ const BarcodeScannerCartPage = () => {
             return;
         }
 
-        if (!customerName.trim() || !customerPhone.trim()) {
+        if (!customerPhone.trim()) { // if*!cutomerName||cutsomerphone
             setCheckoutMessage("Please enter customer name and phone number.");
             return;
         }
@@ -266,7 +268,7 @@ const BarcodeScannerCartPage = () => {
 
         const orderData = {
             customer: {
-                name: customerName.trim(),
+                // name: customerName.trim(),
                 phone: customerPhone.trim(),
             },
             items: cartItems.map(item => ({
@@ -293,14 +295,13 @@ const BarcodeScannerCartPage = () => {
                 setCheckoutMessage(`Order placed successfully! Order ID: ${result.orderId || 'N/A'}`);
                 toast.success('Checkout was successful!');
 
-                // Set the captured timestamp to be used by the Invoice component for printing
                 setCurrentInvoiceDateTime(orderDateISO);
 
                 // Delay printing slightly to allow state updates and toast to appear
                 setTimeout(() => {
                     handlePrintBill(); // Trigger the print function
                     setCartItems([]); // Clear cart after successful checkout and print attempt
-                    setCustomerName(''); // Clear customer details
+                    // setCustomerName(''); // Clear customer details
                     setCustomerPhone('');
                     setCurrentInvoiceDateTime(''); // Clear invoice date after print/cart reset
                 }, 500);
@@ -411,7 +412,7 @@ const BarcodeScannerCartPage = () => {
                     </div>
 
                     <div class="mb-4 border-b pb-2 border-dashed">
-                        <p class="font-bold text-sm">Customer: ${customerName || 'N/A'}</p>
+                        
                         <p class="font-bold text-sm">Phone: ${customerPhone || 'N/A'}</p>
                         <p class="font-bold text-sm">Date: ${formattedDate}</p>
                         <p class="font-bold text-sm">Time: ${formattedTime}</p>
@@ -460,8 +461,9 @@ const BarcodeScannerCartPage = () => {
         setTimeout(() => {
             setIsPrinting(false);
         }, 1000);
-    }, [cartItems, customerName, customerPhone, calculateTotal, currentInvoiceDateTime]);
+    }, [cartItems, customerPhone, calculateTotal, currentInvoiceDateTime]);
 
+    {/**removed customerName */}
 
     return (
         <div className="bg-white relative text-black w-full min-h-screen">
@@ -618,7 +620,7 @@ const BarcodeScannerCartPage = () => {
 
                     <div className="bg-gray-50 p-6 rounded-lg shadow-sm mt-8">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800">Customer Information</h2>
-                        <div className="mb-4">
+                        {/* <div className="mb-4">
                             <label htmlFor="customerName" className="block text-gray-700 text-sm font-bold mb-2">
                                 Name:
                             </label>
@@ -630,7 +632,7 @@ const BarcodeScannerCartPage = () => {
                                 onChange={(e) => setCustomerName(e.target.value)}
                                 placeholder="Enter customer name"
                             />
-                        </div>
+                        </div> */}
                         <div className="mb-6">
                             <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-bold mb-2">
                                 Phone Number:
@@ -664,7 +666,6 @@ const BarcodeScannerCartPage = () => {
                             {loadingCheckout ? 'Processing...' : 'Proceed to Checkout'}
                         </button>
 
-                        {/* Print Bill Button - Visible only if there are items in the cart */}
                         {cartItems.length > 0 && (
                             <button
                                 onClick={handlePrintBill}
@@ -679,11 +680,7 @@ const BarcodeScannerCartPage = () => {
                             </button>
                         )}
 
-                        {/* This is a placeholder for potential hidden print content.
-                            With the current window.open approach, it's not strictly necessary,
-                            but it's good practice for other print methods. */}
                         <div style={{ display: 'none' }} ref={printAreaRef}>
-                            {/* Invoice component content could be rendered here if not building HTML string */}
                         </div>
                     </div>
                 </div>

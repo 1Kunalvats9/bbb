@@ -212,28 +212,25 @@ const BarcodeLabelPrinterPage = () => {
         }
         printContent.innerHTML = labelsHtml;
 
-        // Use a small delay to ensure the DOM is updated before rendering barcodes
         setTimeout(() => {
             for (let i = 0; i < labelQuantity; i++) {
                 const barcodeElement = printContent.querySelector(`#barcode-${selectedProduct.barcode}-${i}`);
                 if (barcodeElement) {
                     try {
-                        // JsBarcode(element, data, options)
                         console.log(String(selectedProduct.barcode))
                         window.JsBarcode(barcodeElement, String(selectedProduct.barcode), {
-                            format: "EAN13", // Common retail barcode format
-                            displayValue: false, // Don't display the number below the barcode (we'll add it manually)
+                            format: "EAN13", 
+                            displayValue: false, 
                             height: 40,
                             width: 1.5,
                             margin: 0,
-                            flat: true // For cleaner rendering
+                            flat: true 
                         });
                     } catch (e) {
                         console.error("Error generating barcode:", e);
                         setError("Failed to generate one or more barcodes. Check console for details.");
                         toast.error("Failed to generate barcodes.", { id: 'print-labels' });
                         setIsPrinting(false);
-                        // Clean up the print content if an error occurs
                         if (printAreaRef.current) {
                             document.body.removeChild(printAreaRef.current);
                             printAreaRef.current = null;
@@ -243,8 +240,7 @@ const BarcodeLabelPrinterPage = () => {
                 }
             }
 
-            // Trigger print dialog
-            const printWindow = window.open('', '_blank'); // Open a new blank window
+            const printWindow = window.open('', '_blank'); 
             printWindow.document.write(`
                 <html>
                 <head>
@@ -330,23 +326,20 @@ const BarcodeLabelPrinterPage = () => {
                 </body>
                 </html>
             `);
-            printWindow.document.close(); // Close the document opened by .write()
+            printWindow.document.close(); 
 
-            // Wait for the content to load and then print
-            printWindow.focus(); // Focus the new window
+            printWindow.focus(); 
 
             toast.success('Labels prepared. Please use your browser\'s print dialog.', { id: 'print-labels', duration: 5000 });
 
-        }, 100); // Small delay to ensure DOM update
-
-        // Cleanup the temporary div after printing (or after a short delay)
+        }, 100);
         setTimeout(() => {
             if (printAreaRef.current && document.body.contains(printAreaRef.current)) {
                 document.body.removeChild(printAreaRef.current);
                 printAreaRef.current = null;
             }
             setIsPrinting(false);
-        }, 3000); // Give some time for print dialog to appear
+        }, 3000); 
     }, [selectedProduct, labelQuantity]);
 
 
@@ -383,11 +376,9 @@ const BarcodeLabelPrinterPage = () => {
                                 onChange={(e) => {
                                     const newBarcode = e.target.value;
                                     setScannedBarcode(newBarcode);
-                                    // Trigger lookup only if a barcode value is present
                                     if (newBarcode.length > 0) {
                                         debouncedLookupProduct(newBarcode);
                                     } else {
-                                        // If input is cleared, reset states
                                         setSelectedProduct(null);
                                         setSearchQuery('');
                                         setSearchResults([]);
@@ -398,7 +389,7 @@ const BarcodeLabelPrinterPage = () => {
                                 onKeyPress={(e) => {
                                     if (e.key === 'Enter') {
                                         if (scannedBarcode.length > 0) {
-                                            lookupProductByBarcode(scannedBarcode); // Call directly without debounce for Enter
+                                            lookupProductByBarcode(scannedBarcode); 
                                         }
                                     }
                                 }}
@@ -422,7 +413,6 @@ const BarcodeLabelPrinterPage = () => {
                             )}
                         </div>
 
-                        {/* Product Name Search Section */}
                         <div className='flex flex-col gap-2'>
                             <div className="flex items-center w-full gap-2">
                                 <input
@@ -514,8 +504,6 @@ const BarcodeLabelPrinterPage = () => {
                     </div>
                 </div>
             </div>
-            {/* This div is used to render content for printing. It's hidden from view. */}
-            {/* The content will be dynamically generated and moved to a new window for actual printing. */}
         </div>
     );
 };

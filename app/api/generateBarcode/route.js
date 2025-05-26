@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-// Helper function to calculate EAN-13 check digit
 function calculateEAN13CheckDigit(first12Digits) {
     if (typeof first12Digits !== 'string' || !/^\d{12}$/.test(first12Digits)) {
         throw new Error("Input must be a 12-digit numeric string for EAN-13 checksum calculation.");

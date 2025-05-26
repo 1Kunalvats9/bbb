@@ -9,7 +9,7 @@ const navLinks = [
     { name: 'Customer History', href: '/customerHistory' },
     {name:'Sell',href:'/barcodeScanCart'},
     {name:'Print Barcodes',href:'/barcodePrinter'},
-    { name: 'Cart', href: '/cart' },
+    // { name: 'Cart', href: '/cart' },
 ];
 
 const Sidebar = () => {

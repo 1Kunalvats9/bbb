@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useCart } from '@/context/cartContext';
 import { ArrowLeft, Trash } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Navbar from '../components/Navbar';
+import Navbar from '../../app/components/Navbar';
 
 const CartPage = () => {
     const { cartItems, setCartItems } = useCart();
@@ -22,8 +22,6 @@ const CartPage = () => {
         setCartItems(prevItems => {
             return prevItems.map(item => {
                 if (item.itemName === itemName) {
-                    // Assuming you might not have availableQuantity here,
-                    // in a real app, you'd re-validate against stock
                     const validatedQuantity = isNaN(parsedQuantity) || parsedQuantity < 1
                         ? 1
                         : parsedQuantity;
@@ -52,8 +50,7 @@ const CartPage = () => {
             setCheckoutMessage("Please enter your name and phone number.");
             return;
         }
-
-        // Basic phone number validation (e.g., 10 digits)
+        
         if (!/^\d{10}$/.test(customerPhone.trim())) {
             setCheckoutMessage("Please enter a valid 10-digit phone number.");
             return;
@@ -176,7 +173,7 @@ const CartPage = () => {
                             Phone Number:
                         </label>
                         <input
-                            type="tel" // Use type="tel" for phone numbers
+                            type="tel" 
                             id="customerPhone"
                             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                             value={customerPhone}

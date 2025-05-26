@@ -88,12 +88,9 @@ const CustomerHistoryPage = () => {
                         >
                             <div className="flex justify-between items-start md:items-center flex-col md:flex-row">
                                 <div className="mb-2 md:mb-0">
-                                    <p className="text-lg font-semibold text-gray-800">
-                                        {order.customerName || 'Guest Customer'}
-                                    </p>
                                     {order.customerPhoneNumber && (
-                                        <p className="text-sm text-gray-500">
-                                            Phone: {order.customerPhoneNumber}
+                                        <p className="text-lg font-bold text-gray-800">
+                                            Phone number: {order.customerPhoneNumber}
                                         </p>
                                     )}
                                 </div>
@@ -132,4 +129,3 @@ const CustomerHistoryPage = () => {
 };
 
 export default CustomerHistoryPage;
-

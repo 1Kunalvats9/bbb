@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/authContext'; // Import the auth hook
+import { useAuth } from '@/context/authContext'; 
 import { useCart } from '@/context/cartContext';
 
 const Navbar = () => {
     const [open, setOpen] = useState(false);
-    const { isLoggedIn, logout } = useAuth(); // Use the auth hook
+    const { isLoggedIn, logout } = useAuth(); 
     const { cartItems } = useCart()
     const router = useRouter();
 
@@ -27,13 +27,13 @@ const Navbar = () => {
 
             {/* Desktop Menu */}
             <div className="hidden sm:flex items-center text-black gap-8">
-                <a href="/" className="hover:scale-105 duration-200">Home</a>
+                {/* <a href="/" className="hover:scale-105 duration-200">Home</a>
                 <a href="#" className="hover:scale-105 duration-200">About</a>
-                <a href="#" className="hover:scale-105 duration-200">Contact</a>
+                <a href="#" className="hover:scale-105 duration-200">Contact</a> */}
 
                 {isLoggedIn && (
                     <>
-                        <div className="relative cursor-pointer" onClick={()=>{router.push('/cart')}}>
+                        <div className="relative cursor-pointer" onClick={()=>{router.push('/barcodeScanCart')}}>
                             <svg
                                 width="18"
                                 height="18"

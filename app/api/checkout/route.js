@@ -42,7 +42,7 @@ export async function POST(req) {
         }));
 
         const newOrderEntry = {
-            customerName: customer.name || 'Guest Customer',
+            // customerName: customer.name || 'Guest Customer',
             customerPhoneNumber: customer.phone,
             products: productsForHistory,
             orderTime: new Date(orderDate),
