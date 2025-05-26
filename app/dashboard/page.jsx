@@ -13,7 +13,6 @@ const Page = () => {
     const { setInventoryItems } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [localInventoryItems, setLocalInventoryItems] = useState([]);
-
     const { isLoggedIn } = useAuth();
     const router = useRouter();
 

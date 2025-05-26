@@ -1,12 +1,11 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Barcode, Trash, PlusCircle, MinusCircle } from 'lucide-react';
-import { useInventory } from '@/context/inventoryContext'; // Still useful for general inventory awareness
-import { useCart } from '@/context/cartContext'; // This is crucial for managing the cart
+import { ArrowLeft, Barcode, Trash, PlusCircle, MinusCircle, Search } from 'lucide-react'; // Added Search icon
+import { useInventory } from '@/context/inventoryContext';
+import { useCart } from '@/context/cartContext';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 
-// Debounce Utility Function (kept for completeness)
 const debounce = (func, delay) => {
     let timeoutId;
     return (...args) => {
@@ -19,16 +18,8 @@ const debounce = (func, delay) => {
     };
 };
 
-// --- Invoice Component ---
-// This component is responsible for the layout and content of the printed bill.
-// It uses React.forwardRef to allow the parent component (BarcodeScannerCartPage)
-// to attach a ref to it, useful if you need to render it on the main page or debug.
 const Invoice = React.forwardRef(({ cartItems, customerName, customerPhone, totalAmount, invoiceDateTime }, ref) => {
-    // Use the provided invoiceDateTime (captured at checkout) to ensure consistency.
     const date = invoiceDateTime ? new Date(invoiceDateTime) : new Date();
-
-    // Format date and time using a specific locale for consistency.
-    // 'en-IN' ensures DD/MM/YYYY and 24-hour time for India.
     const formattedDate = date.toLocaleDateString('en-IN');
     const formattedTime = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
@@ -82,7 +73,10 @@ const Invoice = React.forwardRef(({ cartItems, customerName, customerPhone, tota
 
 const BarcodeScannerCartPage = () => {
     const [scannedBarcode, setScannedBarcode] = useState('');
-    const { inventoryItems } = useInventory();
+    const [productSearchTerm, setProductSearchTerm] = useState(''); // New state for search term
+    const [productSuggestions, setProductSuggestions] = useState([]); // New state for search suggestions
+    const [isSearching, setIsSearching] = useState(false); // New state for search loading
+    const { inventoryItems } = useInventory(); // Assuming inventoryItems might be used for client-side filtering if API not ready
     const { cartItems, setCartItems } = useCart();
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
@@ -104,6 +98,69 @@ const BarcodeScannerCartPage = () => {
     useEffect(() => {
         setCheckoutMessage('');
     }, [cartItems]);
+
+    // Debounced search function
+    const performSearch = useCallback(debounce(async (term) => {
+        if (term.length < 2) { // Only search if term is at least 2 characters
+            setProductSuggestions([]);
+            setIsSearching(false);
+            return;
+        }
+
+        setIsSearching(true);
+        try {
+            // Adjust this API route to your backend for product name search
+            const response = await fetch(`/api/searchProductByName?name=${encodeURIComponent(term)}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                setProductSuggestions(data.products.slice(0, 6)); // Limit to top 6 suggestions
+            } else {
+                console.error("Failed to fetch product suggestions:", data.error);
+                setProductSuggestions([]);
+            }
+        } catch (error) {
+            console.error("Network error fetching product suggestions:", error);
+            setProductSuggestions([]);
+        } finally {
+            setIsSearching(false);
+        }
+    }, 300), []); // Debounce by 300ms
+
+    useEffect(() => {
+        performSearch(productSearchTerm);
+    }, [productSearchTerm, performSearch]);
+
+    // Function to add item to cart (used by both barcode and name search)
+    const addItemToCart = useCallback((product) => {
+        const existingCartItem = cartItems.find(item => item.barcode === product.barcode);
+
+        if (existingCartItem) {
+            setCartItems(prevItems => {
+                return prevItems.map(item =>
+                    item.barcode === product.barcode
+                        ? { ...item, quantity: item.quantity + 1 }
+                        : item
+                );
+            });
+            toast.success(`Increased quantity of ${existingCartItem.itemName} to ${existingCartItem.quantity + 1}`);
+        } else {
+            setCartItems(prevItems => [
+                ...prevItems,
+                {
+                    itemName: product.itemName,
+                    price: product.discountedPrice || product.originalPrice,
+                    quantity: 1,
+                    barcode: product.barcode,
+                }
+            ]);
+            toast.success(`Added ${product.itemName} to cart!`);
+        }
+        setProductSearchTerm(''); // Clear search term after adding
+        setProductSuggestions([]); // Clear suggestions
+        barcodeInputRef.current?.focus(); // Keep focus on barcode scanner
+    }, [cartItems, setCartItems]);
+
 
     const lookupProductAndAddToCart = useCallback(async (barcode) => {
         if (!barcode) {
@@ -146,21 +203,11 @@ const BarcodeScannerCartPage = () => {
 
             if (response.ok) {
                 const product = data.product;
-
-                setCartItems(prevItems => [
-                    ...prevItems,
-                    {
-                        itemName: product.itemName,
-                        price: product.discountedPrice || product.originalPrice,
-                        quantity: 1,
-                        barcode: product.barcode,
-                    }
-                ]);
-                toast.success(`Added ${product.itemName} to cart!`, { id: 'barcode-scan' });
+                addItemToCart(product); // Use the common function
             } else if (response.status === 404) {
                 toast.error(`Product with barcode ${barcode} not found.`, { id: 'barcode-scan' });
             } else {
-                toast.error(data.error || Error `looking up barcode: ${response.status}`, { id: 'barcode-scan' });
+                toast.error(data.error || `Error looking up barcode: ${response.status}`, { id: 'barcode-scan' });
             }
         } catch (err) {
             toast.error(`Network error: ${err.message}`, { id: 'barcode-scan' });
@@ -169,7 +216,7 @@ const BarcodeScannerCartPage = () => {
             setScannedBarcode('');
             barcodeInputRef.current?.focus();
         }
-    }, [setCartItems, cartItems]);
+    }, [setCartItems, cartItems, addItemToCart]); // Added addItemToCart to dependency array
 
     const handleQuantityChange = (barcode, newQuantity) => {
         const parsedQuantity = parseInt(newQuantity, 10);
@@ -192,7 +239,7 @@ const BarcodeScannerCartPage = () => {
     };
 
     const calculateTotal = () => {
-        return cartItems.reduce((total, item) => total + (Number(item.price) * Number(item.quantity)), 0);
+        return cartItems.reduce((total, item) => total + (Number(item.price) * parseFloat(item.quantity)), 0);
     };
 
     const handleCheckout = async () => {
@@ -284,7 +331,6 @@ const BarcodeScannerCartPage = () => {
         setIsPrinting(true);
         toast.loading('Preparing bill for printing...', { id: 'print-bill' });
 
-        // Generate the invoice HTML dynamically
         const date = new Date(currentInvoiceDateTime || new Date());
         const formattedDate = date.toLocaleDateString('en-IN');
         const formattedTime = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -397,7 +443,6 @@ const BarcodeScannerCartPage = () => {
             </html>
         `;
 
-        // Open a new window
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
             toast.error("Pop-up blocked! Please allow pop-ups for this site to print the bill.", { id: 'print-bill', duration: 5000 });
@@ -405,25 +450,16 @@ const BarcodeScannerCartPage = () => {
             return;
         }
 
-        // Write the generated HTML to the new window
         printWindow.document.write(invoiceHtml);
-        printWindow.document.close(); // Close the document to ensure content is rendered
-
-        // Focus the new window and trigger print
+        printWindow.document.close();
         printWindow.focus();
         printWindow.print();
 
-        // Optional: Close the print window after print dialog is initiated
-        // Note: window.close() might not work in all browsers due to security policies.
-        // It's often better to let the user close it.
-        // printWindow.onafterprint = function() { printWindow.close(); };
-
         toast.success('Bill prepared. Please use your browser\'s print dialog.', { id: 'print-bill', duration: 5000 });
 
-        // Clean up the printing state after a short delay
         setTimeout(() => {
             setIsPrinting(false);
-        }, 1000); // Give a second for the print dialog to appear
+        }, 1000);
     }, [cartItems, customerName, customerPhone, calculateTotal, currentInvoiceDateTime]);
 
 
@@ -446,6 +482,7 @@ const BarcodeScannerCartPage = () => {
                     </div>
 
                     <div className="space-y-4 mb-6">
+                        {/* Barcode Scanner Input */}
                         <div className="flex items-center gap-4">
                             <input
                                 ref={barcodeInputRef}
@@ -454,6 +491,8 @@ const BarcodeScannerCartPage = () => {
                                 value={scannedBarcode}
                                 onChange={(e) => {
                                     setScannedBarcode(e.target.value);
+                                    // Optionally clear search term if user is scanning
+                                    if (e.target.value) setProductSearchTerm('');
                                 }}
                                 onKeyPress={(e) => {
                                     if (e.key === 'Enter') {
@@ -476,12 +515,55 @@ const BarcodeScannerCartPage = () => {
                                 </button>
                             )}
                         </div>
+
+                        {/* Search by Name Input */}
+                        <div className="relative">
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Search product by name..."
+                                    value={productSearchTerm}
+                                    onChange={(e) => {
+                                        setProductSearchTerm(e.target.value);
+                                        // Clear barcode input if user starts typing a name
+                                        if (e.target.value) setScannedBarcode('');
+                                    }}
+                                    className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                />
+                                {isSearching && (
+                                    <span className="text-gray-500 text-sm">Searching...</span>
+                                )}
+                                <Search className="text-gray-400" size={20} />
+                            </div>
+
+                            {/* Suggestions Dropdown */}
+                            {productSearchTerm.length > 1 && productSuggestions.length > 0 && (
+                                <div className="absolute z-10 w-full mt-2 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                    {productSuggestions.map((product) => (
+                                        <div
+                                            key={product.barcode}
+                                            className="p-3 cursor-pointer hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                                            onClick={() => addItemToCart(product)}
+                                        >
+                                            <p className="font-semibold text-gray-800">{product.itemName}</p>
+                                            <p className="text-sm text-gray-600">Barcode: {product.barcode} - ₹{product.discountedPrice || product.originalPrice}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {productSearchTerm.length > 1 && !isSearching && productSuggestions.length === 0 && (
+                                <div className="absolute z-10 w-full mt-2 bg-white border border-gray-300 rounded-md shadow-lg p-3 text-center text-gray-500">
+                                    No matching products found.
+                                </div>
+                            )}
+                        </div>
                     </div>
+
 
                     <div className="mt-6">
                         <h2 className="text-xl font-semibold text-gray-800 mb-4">Cart Items</h2>
                         {cartItems.length === 0 ? (
-                            <p className="text-center text-gray-600">Your cart is empty. Scan an item to begin!</p>
+                            <p className="text-center text-gray-600">Your cart is empty. Scan or search for an item to begin!</p>
                         ) : (
                             <div className="space-y-3">
                                 {cartItems.map(item => (
@@ -501,7 +583,7 @@ const BarcodeScannerCartPage = () => {
                                                 <MinusCircle size={18} />
                                             </button>
                                             <input
-                                                type="number"
+                                                type="text"
                                                 min="1"
                                                 value={item.quantity}
                                                 onChange={(e) => handleQuantityChange(item.barcode, e.target.value)}
