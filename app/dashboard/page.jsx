@@ -23,12 +23,12 @@ const Page = () => {
 
     useEffect(() => {
         const loadInventory = async () => {
-            if (inventoryItems && inventoryItems.length > 0) {
-                setLocalInventoryItems(inventoryItems);
-                console.log("Inventory loaded from context (localStorage).");
-                return; 
-            }
-            console.log("Fetching inventory from server...");
+            // if (inventoryItems && inventoryItems.length > 0) {
+            //     setLocalInventoryItems(inventoryItems);
+            //     console.log("Inventory loaded from context (localStorage).");
+            //     return; 
+            // }
+            // console.log("Fetching inventory from server...");
             try {
                 const res = await fetch('/api/getInventoryProducts', {
                     method: 'GET',

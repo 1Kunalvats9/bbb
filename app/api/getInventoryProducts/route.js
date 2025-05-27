@@ -3,7 +3,7 @@ import Inventory from "@/models/inventoryModel";
 import { NextResponse } from "next/server";
 export async function GET() {
     try {
-        await mongoose.connect(process.env.MONGODB_URI); // Ensure you have MONGODB_URI in your env
+        await mongoose.connect(process.env.MONGODB_URI);
         const inventory = await Inventory.findOne({});
 
         if (!inventory) {
