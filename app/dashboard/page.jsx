@@ -3,14 +3,13 @@ import React, { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useInventory } from '@/context/inventoryContext'
 import Footer from '../components/Footer'
-import { useAuth } from '@/context/authContext'
+import { useAuth } from '@/context/authContext';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/cartContext'
 import { Search } from 'lucide-react'
 import InventoryProductCard from "@/app/components/InventoryProductCard"
-
 const Page = () => {
-    const { inventoryItems, setInventoryItems, updateInventoryItem } = useInventory();
+    const { setInventoryItems } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [localInventoryItems, setLocalInventoryItems] = useState([]);
     const { isLoggedIn } = useAuth();
@@ -22,49 +21,32 @@ const Page = () => {
     }, [isLoggedIn, router]);
 
     useEffect(() => {
-        const loadInventory = async () => {
-            // if (inventoryItems && inventoryItems.length > 0) {
-            //     setLocalInventoryItems(inventoryItems);
-            //     console.log("Inventory loaded from context (localStorage).");
-            //     return; 
-            // }
-            // console.log("Fetching inventory from server...");
+        const fetchInventory = async () => {
             try {
                 const res = await fetch('/api/getInventoryProducts', {
                     method: 'GET',
-                    headers: {
-                        'Content-type': 'application/json'
-                    }
+                    'Content-type': 'application/json'
                 });
-
                 if (!res.ok) {
                     throw new Error(`Failed to fetch inventory: ${res.status}`);
                 }
                 const data = await res.json();
-                setLocalInventoryItems(data); 
-                setInventoryItems(data);     
-                console.log("Inventory fetched from server and updated context.");
-
+                setLocalInventoryItems(data);
+                setInventoryItems(data);
             } catch (error) {
                 console.error("Error fetching inventory:", error);
             }
-        };
-
-        if (isLoggedIn) {
-            loadInventory();
         }
-    }, [isLoggedIn, inventoryItems, setInventoryItems]); 
-                                                        
-                                                    
-    useEffect(() => {
-        setLocalInventoryItems(inventoryItems);
-    }, [inventoryItems]); 
-
-    const { cartItems } = useCart() 
+        if (isLoggedIn) {
+            fetchInventory();
+        }
+    }, [setInventoryItems, isLoggedIn]);
+    const { cartItems } = useCart()
     const filteredInventoryItems = localInventoryItems.filter(item =>
         item.itemName.toLowerCase().includes(searchQuery.toLowerCase())
     );
     if (!isLoggedIn) {
+
         return null;
     }
 
@@ -84,7 +66,6 @@ const Page = () => {
                         value={searchQuery}
                     />
                 </div>
-
                 <div className="w-full grid grid-cols-[50px_2fr_1fr_1fr_1.5fr_0.5fr] gap-4 p-3 rounded-lg bg-gray-200 font-semibold text-gray-700">
                     <div>S.No.</div>
                     <div>Item Name</div>
@@ -100,13 +81,12 @@ const Page = () => {
                             filteredInventoryItems.map((item, index) => {
                                 return (
                                     <InventoryProductCard
-                                        key={item._id || index} 
+                                        key={index}
                                         serialNumber={index + 1}
                                         itemName={item.itemName}
                                         availableQuantity={item.quantity}
                                         price={item.discountedPrice}
                                         itemId={item._id}
-                                        onInventoryUpdate={updateInventoryItem}
                                     />
                                 );
                             }) :
@@ -122,5 +102,4 @@ const Page = () => {
         </div>
     )
 }
-
 export default Page;
