@@ -14,7 +14,7 @@ const CustomerHistoryPage = () => {
             setError(null);
             let url = '/api/customerHistory';
             if (search) {
-                url = `/api/getCustomerHistory?search=${search}`; // Use the correct route
+                url = `/api/getCustomerHistory?search=${search}`;
             }
             try {
                 const response = await fetch(url);

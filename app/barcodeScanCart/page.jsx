@@ -18,7 +18,7 @@ const debounce = (func, delay) => {
     };
 };
 
-{/*removed customerName from function */}
+{/*removed customerName from function */ }
 
 const Invoice = React.forwardRef(({ cartItems, customerPhone, totalAmount, invoiceDateTime }, ref) => {
     const date = invoiceDateTime ? new Date(invoiceDateTime) : new Date();
@@ -221,14 +221,13 @@ const BarcodeScannerCartPage = () => {
     }, [setCartItems, cartItems, addItemToCart]); // Added addItemToCart to dependency array
 
     const handleQuantityChange = (barcode, newQuantity) => {
-        const parsedQuantity = parseInt(newQuantity, 10);
+        const parsedQuantity = parseFloat(newQuantity); // Changed to parseFloat
 
         setCartItems(prevItems => {
             return prevItems.map(item => {
                 if (item.barcode === barcode) {
-                    const validatedQuantity = isNaN(parsedQuantity) || parsedQuantity < 1
-                        ? 1
-                        : parsedQuantity;
+                    // No minimum value constraint, just check if it's a valid number
+                    const validatedQuantity = isNaN(parsedQuantity) ? 0 : parsedQuantity; // Can be 0 or less
                     return { ...item, quantity: validatedQuantity };
                 }
                 return item;
@@ -273,8 +272,8 @@ const BarcodeScannerCartPage = () => {
             },
             items: cartItems.map(item => ({
                 productName: item.itemName,
-                quantity: parseInt(item.quantity),
-                unitPrice: parseFloat(item.price), // Use parseFloat for prices
+                quantity: parseFloat(item.quantity), // Changed to parseFloat
+                unitPrice: parseFloat(item.price),
                 barcode: item.barcode,
             })),
             totalAmount: calculateTotal(),
@@ -412,7 +411,7 @@ const BarcodeScannerCartPage = () => {
                     </div>
 
                     <div class="mb-4 border-b pb-2 border-dashed">
-                        
+
                         <p class="font-bold text-sm">Phone: ${customerPhone || 'N/A'}</p>
                         <p class="font-bold text-sm">Date: ${formattedDate}</p>
                         <p class="font-bold text-sm">Time: ${formattedTime}</p>
@@ -463,7 +462,7 @@ const BarcodeScannerCartPage = () => {
         }, 1000);
     }, [cartItems, customerPhone, calculateTotal, currentInvoiceDateTime]);
 
-    {/**removed customerName */}
+    {/**removed customerName */ }
 
     return (
         <div className="bg-white relative text-black w-full min-h-screen">
@@ -577,22 +576,22 @@ const BarcodeScannerCartPage = () => {
                                         </div>
                                         <div className="flex items-center space-x-3">
                                             <button
-                                                onClick={() => handleQuantityChange(item.barcode, item.quantity - 1)}
-                                                disabled={item.quantity <= 1}
-                                                className="p-1 rounded-full bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                                                // Decrementing now potentially goes into negative numbers as per no minimum constraint
+                                                onClick={() => handleQuantityChange(item.barcode, (parseFloat(item.quantity) - 1).toFixed(2))}
+                                                className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
                                                 title="Decrease quantity"
                                             >
                                                 <MinusCircle size={18} />
                                             </button>
                                             <input
-                                                type="text"
-                                                min="1"
+                                                type="number" 
+                                                step="any"   
                                                 value={item.quantity}
                                                 onChange={(e) => handleQuantityChange(item.barcode, e.target.value)}
                                                 className="w-16 p-1 text-black border border-gray-300 rounded-md text-center"
                                             />
                                             <button
-                                                onClick={() => handleQuantityChange(item.barcode, item.quantity + 1)}
+                                                onClick={() => handleQuantityChange(item.barcode, (parseFloat(item.quantity) + 1).toFixed(2))}
                                                 className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
                                                 title="Increase quantity"
                                             >
@@ -672,9 +671,9 @@ const BarcodeScannerCartPage = () => {
                                 disabled={isPrinting}
                                 className={`w-full mt-4 py-3 px-4 rounded-md font-bold text-lg focus:outline-none focus:ring-2 focus:ring-opacity-50
                                 ${isPrinting
-                                    ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500'
-                                }`}
+                                        ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                                        : 'bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500'
+                                    }`}
                             >
                                 {isPrinting ? 'Preparing Print...' : 'Print Bill'}
                             </button>
