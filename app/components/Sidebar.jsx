@@ -9,7 +9,7 @@ const navLinks = [
     { name: 'Customer History', href: '/customerHistory' },
     {name:'Sell',href:'/barcodeScanCart'},
     {name:'Print Barcodes',href:'/barcodePrinter'},
-    // { name: 'Cart', href: '/cart' },
+    {name:'Analytics',href:'/analytics'}
 ];
 
 const Sidebar = () => {
@@ -24,7 +24,6 @@ const Sidebar = () => {
                     const isActive = pathname === link.href;
 
                     return (
-                        // Changed: Removed passHref and legacyBehavior, moved className directly to Link
                         <Link href={link.href} key={link.name} className={`${baseLinkClasses} ${isActive ? activeLinkClasses : ''}`}>
                             {link.name}
                         </Link>
