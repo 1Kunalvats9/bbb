@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Search, Barcode, PlusCircle, CheckCircle, Save, Sparkles } from 'lucide-react'; // Added Save and Sparkles icons
+import { ArrowLeft, Search, Barcode, PlusCircle, CheckCircle, Save, Sparkles } from 'lucide-react';
 import { useInventory } from '@/context/inventoryContext';
 import searchInventoryItems from '@/lib/searchInventoryItems';
 import toast from 'react-hot-toast';
@@ -24,7 +24,7 @@ const AddProductPage = () => {
     const [itemName, setItemName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
-    const [isSavingNewProduct, setIsSavingNewProduct] = useState(false); // Renamed from isGeneratingBarcode for clarity
+    const [isSavingNewProduct, setIsSavingNewProduct] = useState(false);
     const [error, setError] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
     const [isProductFound, setIsProductFound] = useState(false);
@@ -34,7 +34,8 @@ const AddProductPage = () => {
     const [originalPrice, setOriginalPrice] = useState('');
     const [discountedPrice, setDiscountedPrice] = useState('');
     const [quantity, setQuantity] = useState('');
-    const [quantityChange, setQuantityChange] = useState('');
+    const [quantityChange, setQuantityChange] = useState(''); // For adding/subtracting quantity during update
+
     const barcodeInputRef = useRef(null);
 
     useEffect(() => {
@@ -47,7 +48,7 @@ const AddProductPage = () => {
     const lookupProductByBarcode = useCallback(async (scannedBarcode) => {
         setError('');
         setSelectedItem(null);
-        setIsProductFound(false); // Reset product found status
+        setIsProductFound(false);
         if (!scannedBarcode) {
             toast.dismiss('barcode-lookup');
             return;
@@ -75,18 +76,18 @@ const AddProductPage = () => {
                 setItemName(product.itemName);
                 setOriginalPrice(product.originalPrice?.toString() || '');
                 setDiscountedPrice(product.discountedPrice?.toString() || '');
+                // Convert quantity from DB (which is Number) to string for the input field
                 setQuantity(product.quantity?.toString() || '');
-                setIsProductFound(true); // Product found in inventory
+                setIsProductFound(true);
                 setSearchResults([]);
                 toast.success(`Product found: ${product.itemName}`, { id: 'barcode-lookup' });
             } else if (response.status === 404) {
-                // Product not found, clear selected item and prepare for new product entry
                 setItemName('');
                 setOriginalPrice('');
                 setDiscountedPrice('');
                 setQuantity('');
                 setSelectedItem(null);
-                setIsProductFound(false); // Product NOT found
+                setIsProductFound(false);
                 toast.error(`No product found for barcode: ${scannedBarcode}. Please fill details to add it.`, { id: 'barcode-lookup' });
             } else {
                 setError(data.error || `Error looking up barcode: ${response.status}`);
@@ -98,7 +99,7 @@ const AddProductPage = () => {
         } finally {
             toast.dismiss('barcode-lookup');
         }
-    }, [selectedItem]); // Dependency on selectedItem might be removed if it causes issues, but it's fine for now.
+    }, []);
 
     const debouncedLookupProduct = useCallback(debounce(lookupProductByBarcode, 300), [lookupProductByBarcode]);
 
@@ -130,11 +131,12 @@ const AddProductPage = () => {
         setBarcode(item.barcode?.toString() || '');
         setOriginalPrice(item.originalPrice?.toString() || '');
         setDiscountedPrice(item.discountedPrice?.toString() || '');
+        // Convert quantity from DB (which is Number) to string for the input field
         setQuantity(item.quantity?.toString() || '');
         setSearchResults([]);
         setError('');
         setIsProductFound(true);
-        setQuantityChange('');
+        setQuantityChange(''); // Clear any previous quantity change input
     };
 
     // --- Form Management and Actions ---
@@ -154,12 +156,9 @@ const AddProductPage = () => {
     };
 
     const handleUpdateProduct = async () => {
-        if (!itemName.trim() || originalPrice === '' || discountedPrice === '' || quantity === '' || !barcode) {
-            setError('Please fill all product fields and ensure a barcode is present.');
-            return;
-        }
-        if (isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseInt(quantity, 10))) {
-            setError('Prices and quantity must be valid numbers.');
+        // Validate inputs using parseFloat for numerical fields
+        if (!itemName.trim() || isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseFloat(quantity)) || !barcode) {
+            setError('Please fill all product fields with valid numbers and ensure a barcode is present.');
             return;
         }
 
@@ -167,28 +166,30 @@ const AddProductPage = () => {
         toast.loading(`Updating ${itemName}...`, { id: 'update-product' });
 
         try {
-            let finalQuantity = parseInt(quantity, 10);
-            const qtyChange = parseInt(quantityChange, 10);
+            let finalQuantity = parseFloat(quantity); // Get current quantity from the input field as float
+            const qtyChangeValue = parseFloat(quantityChange); // Get quantity change as float
 
-            if (!isNaN(qtyChange)) {
-                finalQuantity = parseInt(quantity, 10) + qtyChange;
-                if (finalQuantity < 0) {
-                    setError('Quantity cannot be negative.');
-                    toast.error('Quantity cannot be negative.', { id: 'update-product' });
-                    return;
-                }
+            // If quantityChange is a valid number, apply it as an adjustment
+            if (!isNaN(qtyChangeValue)) {
+                finalQuantity = finalQuantity + qtyChangeValue;
             }
 
-            // Assuming /api/addProduct is for PUT/UPDATE
+            if (finalQuantity < 0) {
+                setError('Final quantity cannot be negative.');
+                toast.error('Final quantity cannot be negative.', { id: 'update-product' });
+                return;
+            }
+
+            // The PUT endpoint is now at `/api/products` for general updates
             const res = await fetch(`/api/addProduct`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     itemName,
-                    quantity: finalQuantity,
+                    quantity: finalQuantity, // Send the calculated float quantity
                     originalPrice: parseFloat(originalPrice),
                     discountedPrice: parseFloat(discountedPrice),
-                    barcode: parseInt(barcode, 10),
+                    barcode: parseInt(barcode, 10), // Barcode is an integer
                 }),
             });
 
@@ -208,18 +209,14 @@ const AddProductPage = () => {
         }
     };
 
-    // Renamed from handleGenerateBarcodeAndSave to reflect new logic
     const handleSaveNewProduct = async () => {
-        if (!itemName.trim() || originalPrice === '' || discountedPrice === '' || quantity === '') {
-            setError('Please fill item name, original price, discounted price, and quantity to save.');
-            return;
-        }
-        if (isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseInt(quantity, 10))) {
-            setError('Prices and quantity must be valid numbers.');
+        // Validate inputs using parseFloat for numerical fields
+        if (!itemName.trim() || isNaN(parseFloat(originalPrice)) || isNaN(parseFloat(discountedPrice)) || isNaN(parseFloat(quantity))) {
+            setError('Please fill item name, original price, discounted price, and quantity with valid numbers to save.');
             return;
         }
 
-        setIsSavingNewProduct(true); // Set loading state for saving
+        setIsSavingNewProduct(true);
         setError('');
         toast.loading('Saving product...', { id: 'save-product' });
 
@@ -243,15 +240,15 @@ const AddProductPage = () => {
             }
 
             // Use /api/products for POST/CREATE
-            const productResponse = await fetch('/api/products', {
+            const productResponse = await fetch('/api/addProduct', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     itemName,
-                    quantity: parseInt(quantity, 10),
-                    originalPrice: parseFloat(originalPrice),
-                    discountedPrice: parseFloat(discountedPrice),
-                    barcode: finalBarcode, // Use the determined finalBarcode
+                    quantity: parseFloat(quantity), // Send quantity as float
+                    originalPrice: parseFloat(originalPrice), // Send price as float
+                    discountedPrice: parseFloat(discountedPrice), // Send price as float
+                    barcode: finalBarcode,
                 }),
             });
             const productData = await productResponse.json();
@@ -259,7 +256,6 @@ const AddProductPage = () => {
             if (!productResponse.ok) {
                 throw new Error(productData.error || `Failed to add product.`);
             }
-            // Update InventoryContext
             setInventoryItems(prevItems => [...prevItems, productData.product]);
 
             toast.success('New item added successfully!', { id: 'save-product' });
@@ -270,7 +266,7 @@ const AddProductPage = () => {
             setError(err.message);
             toast.error(err.message, { id: 'save-product' });
         } finally {
-            setIsSavingNewProduct(false); // Reset loading state
+            setIsSavingNewProduct(false);
             toast.dismiss('save-product');
         }
     };
@@ -279,8 +275,8 @@ const AddProductPage = () => {
         router.back();
     };
 
-    // Check if the form has enough data to attempt a save/update action
-    const isFormReadyForAction = itemName.trim() && originalPrice !== '' && discountedPrice !== '' && quantity !== '';
+    // Check if the form has enough valid numerical data to attempt a save/update action
+    const isFormReadyForAction = itemName.trim() && !isNaN(parseFloat(originalPrice)) && !isNaN(parseFloat(discountedPrice)) && !isNaN(parseFloat(quantity));
 
     return (
         <div className="bg-white relative text-black w-full min-h-screen">
@@ -305,25 +301,16 @@ const AddProductPage = () => {
                         <div className="flex items-center gap-4">
                             <input
                                 ref={barcodeInputRef}
-                                type="text"
+                                type="text" // Keep as text, parse with parseInt
                                 placeholder="Scan barcode or enter manually"
                                 value={barcode}
                                 onChange={(e) => {
                                     const newBarcode = e.target.value;
                                     setBarcode(newBarcode);
-                                    // Only trigger lookup if barcode is not empty
                                     if (newBarcode.length > 0) {
                                         debouncedLookupProduct(newBarcode);
                                     } else {
-                                        // If barcode input is cleared, reset form fields for new entry
-                                        setItemName('');
-                                        setOriginalPrice('');
-                                        setDiscountedPrice('');
-                                        setQuantity('');
-                                        setQuantityChange('');
-                                        setSelectedItem(null);
-                                        setIsProductFound(false);
-                                        setError('');
+                                        handleClearForm(); // Clear form when barcode is empty
                                     }
                                 }}
                                  className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
@@ -407,27 +394,44 @@ const AddProductPage = () => {
 
                         <div className="flex items-center gap-4 mb-2">
                             <input
-                                type="number"
+                                type="number" // Use type="number" for prices
+                                step="any"   // Allows decimal input for prices
                                 placeholder="Original Price"
                                 value={originalPrice}
                                 onChange={(e) => setOriginalPrice(e.target.value)}
                                 className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
                             <input
-                                type="number"
+                                type="number" // Use type="number" for prices
+                                step="any"   // Allows decimal input for prices
                                 placeholder="Discounted Price"
                                 value={discountedPrice}
                                 onChange={(e) => setDiscountedPrice(e.target.value)}
                                 className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
                             <input
-                                type="number"
+                                type="number" // Use type="number" for quantity
+                                step="any"   // Allows decimal input for quantity
                                 placeholder="Quantity"
                                 value={quantity}
                                 onChange={(e) => setQuantity(e.target.value)}
                                 className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
                             />
                         </div>
+                        {/* New input for quantity change - only relevant for updates */}
+                        {isProductFound && selectedItem && (
+                            <div className="mt-2">
+                                <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="Add/Subtract Quantity (e.g., -0.5 or 2.0)"
+                                    value={quantityChange}
+                                    onChange={(e) => setQuantityChange(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#615FFF]"
+                                />
+                                <p className="text-gray-600 text-sm mt-1">Enter a positive number to add stock, a negative number to reduce stock.</p>
+                            </div>
+                        )}
 
                         {error && <p className="text-red-500 text-sm">{error}</p>}
                     </div>
@@ -443,17 +447,17 @@ const AddProductPage = () => {
                             </button>
                         )}
 
-                        {!isProductFound && ( // Only show this button if product is NOT found
+                        {!isProductFound && (
                             <button
-                                onClick={handleSaveNewProduct} // Call the modified save function
+                                onClick={handleSaveNewProduct}
                                 className="bg-[#615FFF] text-white hover:bg-[#4a3fbc] px-6 py-3 flex items-center justify-center gap-1 rounded-md cursor-pointer w-full"
-                                disabled={isSavingNewProduct || !isFormReadyForAction} // Use new loading state
+                                disabled={isSavingNewProduct || !isFormReadyForAction}
                             >
                                 {isSavingNewProduct ? (
                                     <>Saving...</>
                                 ) : (
                                     <>
-                                        {barcode ? ( // Dynamic button text based on barcode presence
+                                        {barcode ? (
                                             <>
                                                 <Save className="mr-2" /> Save New Product with Scanned Barcode
                                             </>
