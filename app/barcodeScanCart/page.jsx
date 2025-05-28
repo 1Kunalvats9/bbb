@@ -665,7 +665,7 @@ const BarcodeScannerCartPage = () => {
                             {loadingCheckout ? 'Processing...' : 'Proceed to Checkout'}
                         </button>
 
-                        {cartItems.length > 0 && (
+                        {/* {cartItems.length > 0 && (
                             <button
                                 onClick={handlePrintBill}
                                 disabled={isPrinting}
@@ -677,7 +677,7 @@ const BarcodeScannerCartPage = () => {
                             >
                                 {isPrinting ? 'Preparing Print...' : 'Print Bill'}
                             </button>
-                        )}
+                        )} */}
 
                         <div style={{ display: 'none' }} ref={printAreaRef}>
                         </div>
