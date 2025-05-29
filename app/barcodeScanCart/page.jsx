@@ -37,7 +37,7 @@ const Invoice = React.forwardRef(({ cartItems, customerPhone, totalAmount, invoi
                 {/* <p className="font-semibold print:text-xs">Customer: {customerName || 'N/A'}</p> */}
                 <p className="font-semibold print:text-xs">Phone: {customerPhone || 'N/A'}</p>
                 <p className="font-semibold print:text-xs">Date: {formattedDate}</p>
-                <p className="font-semibold print:text-xs">Time: {formattedTime}</p>
+                <p className="font-semibold print:text-xs">Time: ${formattedTime}</p>
             </div>
 
             <table className="w-full text-left border-collapse mb-6 print:mb-2">
@@ -229,6 +229,19 @@ const BarcodeScannerCartPage = () => {
                     // No minimum value constraint, just check if it's a valid number
                     const validatedQuantity = isNaN(parsedQuantity) ? 0 : parsedQuantity; // Can be 0 or less
                     return { ...item, quantity: validatedQuantity };
+                }
+                return item;
+            });
+        });
+    };
+
+    const handleConvertToKg = (barcode) => {
+        setCartItems(prevItems => {
+            return prevItems.map(item => {
+                if (item.barcode === barcode) {
+                    const convertedQuantity = parseFloat(item.quantity) / 1000;
+                    toast.success('converted succesfully');
+                    return { ...item, quantity: convertedQuantity };
                 }
                 return item;
             });
@@ -568,7 +581,7 @@ const BarcodeScannerCartPage = () => {
                         ) : (
                             <div className="space-y-3">
                                 {cartItems.map(item => (
-                                    <div key={item.barcode} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50">
+                                    <div key={item.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50">
                                         <div className="flex-grow">
                                             <h3 className="text-lg font-semibold text-gray-800">{item.itemName}</h3>
                                             <p className="text-gray-600 text-sm">Barcode: {item.barcode}</p>
@@ -597,6 +610,13 @@ const BarcodeScannerCartPage = () => {
                                             >
                                                 <PlusCircle size={18} />
                                             </button>
+                                            {/* "To Kg" button */}
+                                            <button 
+                                                className='px-2 py-1 rounded-lg bg-gray-200 cursor-pointer hover:bg-gray-300 duration-150' 
+                                                onClick={() => handleConvertToKg(item.barcode)}
+                                            >
+                                                → to kg
+                                            </button>
                                             <p className="text-lg font-bold text-green-600 min-w-[70px] text-right">₹{(Number(item.price) * Number(item.quantity)).toFixed(2)}</p>
                                             <button
                                                 onClick={() => handleRemoveItem(item.barcode)}
@@ -619,19 +639,6 @@ const BarcodeScannerCartPage = () => {
 
                     <div className="bg-gray-50 p-6 rounded-lg shadow-sm mt-8">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800">Customer Information</h2>
-                        {/* <div className="mb-4">
-                            <label htmlFor="customerName" className="block text-gray-700 text-sm font-bold mb-2">
-                                Name:
-                            </label>
-                            <input
-                                type="text"
-                                id="customerName"
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                value={customerName}
-                                onChange={(e) => setCustomerName(e.target.value)}
-                                placeholder="Enter customer name"
-                            />
-                        </div> */}
                         <div className="mb-6">
                             <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-bold mb-2">
                                 Phone Number:

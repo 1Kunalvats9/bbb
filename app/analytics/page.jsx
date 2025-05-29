@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Package, DollarSign, ShoppingCart, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Package, DollarSign, ShoppingCart, TrendingUp, Sun } from 'lucide-react'; // Added Sun icon
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -24,6 +24,7 @@ const AnalyticsPage = () => {
                 }
                 const inventoryItems = await inventoryRes.json();
                 setInventoryData(inventoryItems);
+
                 const historyRes = await fetch('/api/getAllCustomerHistory');
                 if (!historyRes.ok) {
                     const errorData = await historyRes.json();
@@ -43,6 +44,7 @@ const AnalyticsPage = () => {
 
         fetchData();
     }, []); 
+
     const totalProductsInInventory = inventoryData.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
     const totalWorthInInventory = inventoryData.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity) || 0;
@@ -51,6 +53,23 @@ const AnalyticsPage = () => {
     }, 0);
     const totalCheckouts = orderHistoryData.length;
     const totalSales = orderHistoryData.reduce((sum, order) => sum + (parseFloat(order.totalAmount) || 0), 0);
+
+    const getTodaysIncome = () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); 
+
+        return orderHistoryData.reduce((sum, order) => {
+            const orderDate = new Date(order.orderTime);
+            orderDate.setHours(0, 0, 0, 0); 
+
+            if (orderDate.getTime() === today.getTime()) {
+                return sum + (parseFloat(order.totalAmount) || 0);
+            }
+            return sum;
+        }, 0);
+    };
+
+    const todaysIncome = getTodaysIncome();
 
     const handleGoBack = () => {
         router.back();
@@ -121,6 +140,12 @@ const AnalyticsPage = () => {
                             <h2 className="text-xl font-semibold text-gray-800">Total Sales</h2>
                             <p className="text-3xl font-bold text-yellow-800 mt-2">₹{totalSales.toFixed(2)}</p>
                             <p className="text-sm text-gray-500">Revenue generated</p>
+                        </div>
+                        <div className="bg-orange-50 p-6 rounded-lg shadow-md flex flex-col items-center text-center border border-orange-200">
+                            <DollarSign size={48} className="text-orange-600 mb-3" />
+                            <h2 className="text-xl font-semibold text-gray-800">Today's Income</h2>
+                            <p className="text-3xl font-bold text-orange-800 mt-2">₹{todaysIncome.toFixed(2)}</p>
+                            <p className="text-sm text-gray-500">Revenue for current day</p>
                         </div>
                     </div>
                 </div>
