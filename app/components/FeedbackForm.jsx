@@ -18,6 +18,12 @@ const FeedbackForm = () => {
                 </div>
             </div>
 
+
+
+
+
+            
+
             <div className="mt-6 w-[350px] md:w-[700px]">
                 <label className="text-black/70" htmlFor="name">Message</label>
                 <textarea className="w-full mt-2 p-2 h-40 border border-gray-500/30 rounded resize-none outline-none focus:border-indigo-300" required></textarea>
